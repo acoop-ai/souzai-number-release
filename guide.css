@@ -1,0 +1,28 @@
+/* ご利用ガイド（全システム共通の型: 左に目次・右に本文・連動） */
+.guide-scroll { flex: 1; min-height: 0; overflow: auto; background: #fff; }
+.guide-status { padding: 16px; margin: 0; }
+.guide-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; padding: 14px 16px 60px; }
+.guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+.guide-toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 4px solid transparent; }
+.guide-toc a:hover { background: #eef2f7; }
+.guide-toc a.is-current { background: var(--brand-soft); border-left-color: var(--brand); font-weight: 700; }
+.guide-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; list-style: none; padding: 0; margin: 0 0 18px; }
+.guide-flow li { background: #f3f7fb; border: 1px solid #bcd3e6; border-radius: 8px; padding: 6px 10px; max-width: 220px; }
+.guide-flow li.arrow { background: none; border: 0; padding: 0; align-self: center; font-size: 18px; color: var(--ink2); }
+.guide-flow strong { display: block; }
+.guide-flow span { font-size: 13.5px; color: var(--ink2); }
+.guide-section { scroll-margin-top: 10px; border-top: 1px solid var(--line); padding: 12px 0; }
+.guide-section:first-of-type { border-top: 0; }
+.guide-section h2 { font-size: 18px; margin: 0 0 6px; }
+.guide-section ul { margin: 0; padding-left: 1.3em; }
+.guide-section li { margin-bottom: 5px; font-size: 16px; }
+.guide-section.is-landing { animation: guide-flash 1s ease-out; }
+@keyframes guide-flash { from { background: #fff7c2; } to { background: transparent; } }
+@media (max-width: 760px) {
+  .guide-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 12px 40px; }
+  .guide-toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .guide-toc a { border: 1px solid var(--line2); border-radius: 999px; padding: 3px 10px; font-size: 14px; }
+  .guide-flow li { max-width: none; }
+  .guide-flow li.arrow { display: none; }
+}
+@media print { .guide-toc, .topbar { display: none !important; } .guide-layout { display: block; } .guide-scroll { overflow: visible; } body.guide-page { height: auto; overflow: visible; } }

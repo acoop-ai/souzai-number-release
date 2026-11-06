@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>ご利用ガイド | 商品呼出番号表</title>
+  <script src="oauth-return.js?v=0.2.0"></script>
+  <link rel="stylesheet" href="styles.css?v=0.2.0">
+  <link rel="stylesheet" href="guide.css?v=0.2.0">
+  <script src="config.js?v=0.2.0" defer></script>
+  <script src="guide.js?v=0.2.0" defer></script>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body class="guide-page">
+  <header class="topbar">
+    <div class="tb-left"><a class="brand" href="index.html"><strong>商品呼出番号表</strong></a><span>ご利用ガイド</span></div>
+    <div class="tb-right"><a class="btn" href="index.html">← 画面へ戻る</a></div>
+  </header>
+  <div class="guide-scroll" id="guide-scroll">
+    <p id="guide-status" class="guide-status" role="status">読み込んでいます…</p>
+    <div id="guide-root" class="guide-layout" hidden>
+      <nav id="guide-toc" class="guide-toc" aria-label="目次"></nav>
+      <div id="guide-content" class="guide-content"></div>
+    </div>
+  </div>
+</body>
+</html>
