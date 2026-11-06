@@ -222,6 +222,23 @@
   // ---------------------------------------------------------------- 色の意味（ピンクの字＝月間特売・名前のセルの塗り〈白・灰色以外〉＝新商品）
   const isSaleFont = (rgb) => PINK_FONTS.indexOf(rgb) >= 0;
   const isNewFill = (rgb) => Boolean(rgb) && !/^([0-9A-Fa-f]{2})\1\1$/.test(rgb);   // 白・灰色は R=G=B
+  // 名前の一部だけをピンクにした行もある（末尾の量のカッコは赤など）。量のカッコを除いた商品名の部分で、空白を除いた字の半分を超えてピンクなら
+  // 月間特売と読む（2026-11-06・10月の5商品。Python の道具と種はこの直しの前）
+  function pinkMostly(runs, text) {
+    const s = String(text === null || text === undefined ? '' : text);
+    const end = (s.replace(/\s*[（(][^（）()]*[)）]\s*$/, '') || s).length;
+    const total = s.slice(0, end).replace(/\s/g, '').length;
+    if (!total || !runs || !runs.length) return false;
+    let pink = 0;
+    runs.forEach((r) => { if (r[2] && isSaleFont(r[2].c) && r[0] < end) pink += s.slice(r[0], Math.min(r[1], end)).replace(/\s/g, '').length; });
+    return pink * 2 > total;
+  }
+  // ピンクは販売形態の印なので、商品の名前の飾りには残さない（core.js の dropSaleColor と同じ決まり）
+  function dropPink(runs) {
+    const out = [];
+    (runs || []).forEach((r) => { const p = Object.assign({}, r[2] || {}); if (isSaleFont(p.c)) delete p.c; if (Object.keys(p).length) out.push([r[0], r[1], p]); });
+    return out;
+  }
 
   // ================================================================ 止める・確かめる
   class StopRead extends Error {
@@ -367,7 +384,7 @@
         if (!isBlank(name) && isFormula(name)) throw stop('名前が式になっています（文字の前提）', cellWhere(ws, r, b.roles.name));
         const kind = !isBlank(name) && isSection(name) ? 'section' : (!isBlank(name) ? 'product' : 'cont');
         const nm = ws.cell(r, b.roles.name) || {};
-        lines.push({ block: b.index, row: r, kind, place: place(r, b.roles.name), cells, nameFont: (nm.font && nm.font.c) || '', nameFill: nm.fill || '', addr: colLetter(b.roles.name) + r });
+        lines.push({ block: b.index, row: r, kind, place: place(r, b.roles.name), cells, nameFont: (nm.font && nm.font.c) || '', nameRuns: nm.runs || null, nameFill: nm.fill || '', addr: colLetter(b.roles.name) + r });
       }
     });
     return { sheet: ws.name, ws, table: key, header_row: hr, print: [c1, r1, c2, r2], blocks, layoutName, lines };
@@ -650,7 +667,7 @@
             const p = byLine.get(tkey + ',' + b.index + ',' + r);
             row['行の種類'] = KIND_PRODUCT;
             row['商品ID'] = p.id;
-            row['月間特売'] = isSaleFont(ln.nameFont) ? '○' : null;
+            row['月間特売'] = isSaleFont(ln.nameFont) || pinkMostly(ln.nameRuns, raw(ln, 'name', 'v')) ? '○' : null;
             row['新商品'] = isNewFill(ln.nameFill) ? '○' : null;
             const pv = asNumber(raw(ln, 'price_visible', 'v'));
             if (!pyEq(pv, p.row['見える価格'])) row['その月の見える価格'] = pv;
@@ -835,7 +852,7 @@
               usedCells.add(t + ',' + r + ',' + c);
               const rr = runsAt(r, c);
               if (!rr) return;
-              if (it['行の種類'] === KIND_PRODUCT) getOr(prodRich, it['商品ID'] + '|' + t)[role] = rr;
+              if (it['行の種類'] === KIND_PRODUCT) { const kept = role === '名前' ? dropPink(rr) : rr; if (kept.length) getOr(prodRich, it['商品ID'] + '|' + t)[role] = kept; }
               else getOr(rowRich, t + '|' + it['区分ID'] + '|' + it['何番目'])[role] = rr;
             });
             r++;

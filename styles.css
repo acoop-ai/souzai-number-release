@@ -39,6 +39,10 @@ button:disabled { cursor: default; }
 .btn-primary:hover:not(:disabled) { background: #174a6d; }
 .btn-quiet { background: rgba(255, 255, 255, .14); color: inherit; border-color: rgba(255, 255, 255, .4); max-width: 17em; overflow: hidden; text-overflow: ellipsis; }
 .btn-quiet:hover:not(:disabled) { background: rgba(255, 255, 255, .25); }
+/* 店に公開の切り替え（月の横）: 非公開＝白い枠だけ／公開中＝緑の面に印。押したあとは「元に戻す」をお知らせに出す */
+.pub-toggle { background: transparent; color: inherit; border: 1px dashed rgba(255, 255, 255, .7); white-space: nowrap; }
+.pub-toggle[aria-pressed="true"] { background: #1f7a4d; border: 1px solid #1f7a4d; color: #fff; }
+.pub-toggle[aria-pressed="true"]::before { content: "✓ "; }
 .btn-danger { color: var(--red); border-color: var(--red); }
 .btn-small { min-height: 28px; padding: 2px 8px; font-size: 13.5px; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
@@ -232,6 +236,7 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 .sheet-scroll { flex: 1; min-height: 0; overflow: auto; position: relative; border-top: 1px solid var(--line); background: #e5e7eb; }
 .sheet-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; background: #fff; font-family: "MS PGothic", "ＭＳ Ｐゴシック", sans-serif; user-select: none; }
 .sheet-grid td { padding: 0 2px; overflow: hidden; white-space: nowrap; line-height: 1.15; box-sizing: border-box; }
+.sheet-grid td.is-spill { overflow: visible; position: relative; z-index: 1; } /* Excel と同じ: 右の空いたセルへ字をはみ出して見せる（見出しの行 z-index 3 より下） */
 .sheet-grid td.is-grab { cursor: grab; }
 .sheet-grid th.gutter { position: sticky; left: 0; z-index: 4; background: #e5e7eb; color: #4b5563; font: 12px sans-serif; border-right: 1px solid var(--line2); border-bottom: 1px solid var(--line); padding: 0 3px; }
 .sheet-grid td.is-head, .sheet-grid th.is-head { position: sticky; z-index: 3; }
@@ -256,7 +261,19 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 .data-table { border-collapse: collapse; font-size: 14px; width: 100%; }
 .data-table th { position: sticky; top: -14px; background: #e5e7eb; text-align: left; padding: 4px 6px; border: 1px solid var(--line); white-space: nowrap; z-index: 2; }
 .data-table td { padding: 4px 6px; border: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
-.settings-table input { width: 72px; height: 32px; border: 1px solid var(--line2); border-radius: 6px; padding: 2px 6px; text-align: right; }
+/* 設定（PO だけ）: 3つの節。上限は3段のボタン（選んでいる物は面の色）・ボタンは文字の幅（横に引き伸ばさない） */
+.set-sec { margin: 0 0 22px; max-width: 900px; }
+.set-sec h3 { font-size: 16px; margin: 0 0 4px; }
+.set-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.set-name { min-width: 11em; display: flex; flex-direction: column; }
+.set-name small { color: var(--ink2); font-size: 12px; }
+.seg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.seg-btn { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 12px; border: 1px solid var(--line2); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; }
+.seg-btn small { font-size: 11.5px; color: var(--ink2); }
+.seg-btn.is-on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.seg-btn.is-on small { color: #e8f0f6; }
+.set-est { margin: 4px 0; font-size: 13.5px; }
+.set-ask { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--red); border-radius: 8px; background: #fff5f5; }
 /* 見るだけの人の一覧: 入力欄でなく文字の表 */
 .list-table.reader-table td { display: block; line-height: 31px; padding: 0 6px; }
 .reader-table .num { text-align: right; }

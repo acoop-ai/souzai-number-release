@@ -10,7 +10,7 @@
   function parseRef(ref) { const m = /^([A-Z]+)(\d+)$/.exec(String(ref)); return { c: letterToCol(m[1]), r: Number(m[2]) }; }
   function parseOverrides(text) { const out = {}; String(text || '').replace(/\//g, '／').split('／').forEach((part) => { const i = part.indexOf(':'); if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim(); }); return out; }
   const isArith = (v) => typeof v === 'string' && v[0] === '=' && /^[0-9.+\-*/() ]+$/.test(v.slice(1));
-  const isPinkFont = (rgb) => rgb === 'FF00FF' || rgb === 'FF3399' || rgb === 'FF33CC';
+  const isPinkFont = C.isSaleFont; // ピンクの字＝月間特売の印（決まりは core.js の1か所）
   function isNewFill(rgb) { if (!rgb || rgb === 'FFFFFF') return false; const r = parseInt(rgb.slice(0, 2), 16), g = parseInt(rgb.slice(2, 4), 16), b = parseInt(rgb.slice(4, 6), 16); return !(r === g && g === b); }
 
   class Grid {
@@ -26,9 +26,18 @@
   }
   function style(cell, key, fc, fl) { cell.s = key || null; if (fc !== undefined) cell.fc = fc; if (fl !== undefined) cell.fl = fl; }
 
-  function pageOf(sh, lastRow) {
-    return { printArea: 'A1:' + sh['印刷の右の列'] + lastRow, orientation: sh['向き'] || 'landscape', paper: sh['用紙'] ? Number(sh['用紙']) : null, scale: sh['縮小（%）'] ? Number(sh['縮小（%）']) : null,
-      margins: { left: sh['余白（左）'], right: sh['余白（右）'], top: sh['余白（上）'], bottom: sh['余白（下）'], header: sh['余白（ヘッダー）'], footer: sh['余白（フッター）'] },
+  /** 表の型に高さの無い行（上限の行数を増やした行・型より多い月間の行）に、既定の行の高さを書く。
+   *  書かないと Excel は字の大きさで高さを決め（16pt の字で約 24pt）、見本の絵と印刷の見立て（core.js の printBox）とずれる */
+  function fillRowHeights(sheet, sh) {
+    const h = Number(sh['既定の行の高さ']); if (!h) return;
+    const hidden = new Set(sheet.hiddenRows || []);
+    for (let r = 1; r <= sheet.lastRow; r++) if (sheet.rowHeights[r] === undefined && !hidden.has(r)) sheet.rowHeights[r] = h;
+  }
+  /** 印刷の設定。どのシートも「1ページに合わせる」（fit）。scale は見立ての縮小（Excel は印刷のときに自分で決め直す）。余白は print.box（core.js の printBox）の物 */
+  function pageOf(sh, lastRow, print) {
+    const mg = print && print.box ? print.box.margins : { left: sh['余白（左）'], right: sh['余白（右）'], top: sh['余白（上）'], bottom: sh['余白（下）'], header: sh['余白（ヘッダー）'], footer: sh['余白（フッター）'] };
+    return { printArea: 'A1:' + sh['印刷の右の列'] + lastRow, orientation: sh['向き'] || 'landscape', paper: sh['用紙'] ? Number(sh['用紙']) : null, fit: true, scale: print ? print.scale : (sh['縮小（%）'] ? Number(sh['縮小（%）']) : null),
+      margins: Object.assign({}, mg),
       hCenter: sh['横の中央'] === '○', vCenter: sh['縦の中央'] === '○', zoom: sh['表示倍率'] ? Number(sh['表示倍率']) : null, defaultRowHeight: sh['既定の行の高さ'] ? Number(sh['既定の行の高さ']) : null,
       header: { l: sh['ヘッダー（左）'], c: sh['ヘッダー（中）'], r: sh['ヘッダー（右）'] }, footer: { l: sh['フッター（左）'], c: sh['フッター（中）'], r: sh['フッター（右）'] } };
   }
@@ -170,7 +179,7 @@
       });
       if (!headDone) { const cell = sheet.grid.at(hr, nameCol); style(cell, typeBlock['表題の書式（見出しの行）'] || null); }
       sheet.meta.blocks.push({ no: b.no, first, last, nameCol, roles, used: b.used, cap: b.cap, over: b.over, rows: metaRows, start });
-      lastRow = Math.max(lastRow, r - 1);
+      lastRow = Math.max(lastRow, capEnd, r - 1); // 本文は上限の行数まで（上限を変えると印刷の範囲も変わる。core.js の numberPrint と同じ決まり）
       // 書式（まとまりの全部の列・本文の行）
       const colRole = {}; Object.keys(roles).forEach((k) => { colRole[letterToCol(roles[k]['列'])] = k; });
       for (let rr = start; rr <= Math.max(capEnd, r - 1); rr++) {
@@ -198,6 +207,8 @@
               if (!sale && isPinkFont(st['字の色'])) fc = '';
               if (isNew && newFill && !isNewFill(st['塗り'])) fl = newFill;
               if (!isNew && isNewFill(st['塗り'])) fl = '';
+              const nameCell = sheet.grid.at(rr, c);
+              if (nameCell.runs && nameCell.runs.length) nameCell.runs = C.saleRuns(nameCell.runs, sale ? (fc || st['字の色']) : '');
             }
           }
           style(sheet.grid.at(rr, c), sk, fc, fl);
@@ -212,27 +223,32 @@
       for (let rr = hr + 1; rr <= lastRow; rr++) style(sheet.grid.at(rr, col.c), col.raw['書式（空き）']);
     });
     sheet.lastRow = lastRow;
-    sheet.page = pageOf(sh, lastRow);
+    fillRowHeights(sheet, sh);
+    const print = C.numberPrint(db, table, null, lay);
+    sheet.page = pageOf(sh, lastRow, print);
+    sheet.meta.print = print;
     sheet.layout = lay;
     return sheet;
   }
 
-  // ------------------------------------------------------------ 月間商品
-  function monthlySheet(db, monthNum) {
-    const table = '月間商品';
+  // ------------------------------------------------------------ 月間商品（部ごとに1枚: 月間特売・新規商品。PO 2026-11-06）
+  //   表の型は1つ（月間商品）のまま。部の決まったセルを1行目からに写し、行は core.js の monthlyPrint の決めた物（空き行を詰めた後）を書く
+  function monthlySheet(db, part, monthNum) {
+    const table = C.MONTHLY_TABLE;
     const sheet = newSheet(db, table, monthNum);
+    sheet.key = part; sheet.name = part;
     const sh = db.type.shapes[table];
+    const p = (db.type.blocks[table] || []).find((b) => b['まとまり'] === part);
+    if (!p) throw new Error('表の型に月間商品の「' + part + '」の部がありません');
     const roleCol = {}; sheet.cols.forEach((c) => { if (c.raw['役割']) roleCol[c.raw['役割']] = c.c; });
-    const parts = (db.type.blocks[table] || []).slice().sort((a, b) => Number(a['題の行']) - Number(b['題の行']));
-    let shift = 0;
-    let lastRow = Number(sh['本文の最後の行']);
+    const plan = C.monthlyPrint(db, part);
     const metaRows = [];
-    parts.forEach((p, i) => {
-      applyFixed(sheet, (db.type.fixed[table] || []).filter((f) => f['まとまり'] === p['まとまり']), shift);
+    {
+      const shift = -(Number(p['題の行']) - 1);
+      applyFixed(sheet, (db.type.fixed[table] || []).filter((f) => f['まとまり'] === part), shift);
       const start = Number(p['本文の最初の行']) + shift;
-      const cap = Number(p['上限の行数']);
-      const rows = db.monthly.filter((g) => g['部'] === p['まとまり']).sort((a, b) => Number(a['順']) - Number(b['順']));
-      const end = start + Math.max(cap, rows.length) - 1;
+      const rows = plan.rows;
+      const end = start + plan.body - 1;
       const kinds = {};
       rows.forEach((g, k) => {
         const r = start + k;
@@ -271,27 +287,41 @@
           style(sheet.grid.at(r, col.c), sk);
         });
       }
-      if (i + 1 < parts.length) shift = Math.max(shift, end + 1 - Number(parts[i + 1]['題の行']));
-      lastRow = Math.max(lastRow, end);
-    });
-    sheet.lastRow = lastRow;
-    sheet.page = pageOf(sh, lastRow);
+      sheet.lastRow = Math.max(start - 1, end);
+    }
+    const lastRow = sheet.lastRow;
+    Object.keys(sheet.rowHeights).forEach((r) => { if (Number(r) > lastRow) delete sheet.rowHeights[r]; }); // 印刷の範囲の外（詰めた・使わなかった行）の高さは書かない
+    fillRowHeights(sheet, sh);
+    sheet.page = pageOf(sh, lastRow, plan);
     sheet.meta.monthly = metaRows;
+    sheet.meta.print = plan;
     return sheet;
   }
 
-  /** ブック全部（Excel の順: 月間商品・首都圏・北関東・焼き物） */
+  /** ブック全部（Excel の順: 月間特売・新規商品・首都圏・北関東・焼き物） */
   function buildBook(db) {
     const monthNum = Number(String(db.month).split('-')[1]);
     const memo = C.rowsBySection(db);
-    const sheets = [monthlySheet(db, monthNum)];
+    const sheets = C.MONTHLY_SHEETS.map((part) => monthlySheet(db, part, monthNum));
     C.TABLE_KEYS.forEach((t) => sheets.push(numberSheet(db, t, monthNum, memo)));
     return { month: db.month, sheets, styles: db.type.styles, shape: db.type.shapes };
   }
   function buildOne(db, table, memo) {
     const monthNum = Number(String(db.month).split('-')[1]);
-    return table === '月間商品' ? monthlySheet(db, monthNum) : numberSheet(db, table, monthNum, memo);
+    return C.MONTHLY_SHEETS.indexOf(table) >= 0 ? monthlySheet(db, table, monthNum) : numberSheet(db, table, monthNum, memo);
+  }
+  /** 見立ての縮小と、商品名の印刷の字の大きさ（設定の画面で見せる）。table: 首都圏・北関東・焼き物・月間特売・新規商品。
+   *  capOverride: 番号表の上限の行数を変えたらの見立て（月間特売・新規商品では使わない）。
+   *  返す値: { scale（%）, namePt（商品名の pt）, ok（8pt 以上）, byWidth（幅で決まる縮小 %）, rows（本文の最後の行・月間は行の数）, squeezed（詰めた空き行）, drop（あと減らす行） } */
+  function estimateScale(db, table, capOverride) {
+    if (C.MONTHLY_SHEETS.indexOf(table) >= 0) {
+      const r = C.monthlyPrint(db, table); if (!r) return null;
+      return { scale: r.scale, namePt: r.namePt, ok: r.ok, byWidth: r.byWidth, rows: r.rows.length, squeezed: r.squeezed, drop: r.drop };
+    }
+    if (!C.TABLES[table]) return null;
+    const r = C.numberPrint(db, table, capOverride); if (!r) return null;
+    return { scale: r.scale, namePt: r.namePt, ok: r.ok, byWidth: r.byWidth, rows: r.lastRow, squeezed: 0, drop: 0 };
   }
 
-  root.SouzaiSheet = { buildBook, buildOne, letterToCol, colToLetter, parseOverrides };
+  root.SouzaiSheet = { buildBook, buildOne, estimateScale, letterToCol, colToLetter, parseOverrides };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

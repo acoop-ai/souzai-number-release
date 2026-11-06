@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  // 記録のタブ（だれが・いつ・何を。前の値に戻す）と、設定（PO だけ・上限の行数）。
+  // 記録のタブ（だれが・いつ・何を。前の値に戻す）と、設定（PO だけ・上限の行数の3段・A4 の見立て・月を消す）。
   const App = window.SouzaiApp;
   const { state, $, el, C, toast } = App;
   const log = { rows: [], q: '', loaded: false };
@@ -69,25 +69,66 @@
   };
 
   // ------------------------------------------------------------ 設定（PO だけ）。画面で隠すだけでなく、窓口が PO のアカウントだけ通す
+  // 上限の行数はシートごとに3段から選ぶ（PO 2026-11-06）。首都圏と北関東はいつも一緒に動くので1つ。値は窓口も同じ一覧で確かめる（Code.gs の CAP_CHOICES）
+  const CAP_ROWS = [{ label: '首都圏・北関東', note: 'いつも一緒に動きます', table: '首都圏', tables: ['首都圏', '北関東'], choices: [54, 57, 60] }, { label: '焼き物', note: '', table: '焼き物', tables: ['焼き物'], choices: [48, 51, 54] }];
+  const estimate = (table, cap) => { try { return App.S && App.S.estimateScale ? App.S.estimateScale(state.db, table, cap) : null; } catch { return null; } };
+  const estText = (e) => (e && e.scale ? '印刷 約 ' + Math.round(e.scale * (e.scale <= 1 ? 100 : 1)) + '%' + (e.namePt ? '・商品名 約 ' + Number(e.namePt).toFixed(1) + 'pt' : '') : '');
   function renderSettings() {
     const root = $('#view-settings'); root.replaceChildren();
     root.append(el('h2', '', '設定（管理者だけ）'));
-    root.append(el('p', 'hint-line', '上限の行数を変えられます。変えたことは記録に残ります。'));
-    const t = el('table', 'data-table settings-table'); const hr = el('tr'); ['表', '列', '上限の行数'].forEach((h) => hr.append(el('th', '', h))); t.append(hr);
-    C.TABLE_KEYS.forEach((table) => {
-      C.blockList(state.db, table).forEach((b) => {
-        const tr = el('tr'); tr.append(el('td', '', table), el('td', '', b['まとまり'] + '列目'));
-        const td = el('td'); const i = el('input'); i.type = 'number'; i.min = '1'; i.max = '200'; i.value = b['上限の行数']; i.setAttribute('aria-label', table + ' ' + b['まとまり'] + '列目の上限');
-        i.addEventListener('change', async () => {
-          const cap = Number(i.value); if (!Number.isInteger(cap) || cap < 1 || cap > 200) { toast('上限の行数は 1 から 200 です。', true); i.value = b['上限の行数']; return; }
-          try { await App.serial(() => App.api('saveSettings', { table, block: String(b['まとまり']), cap, requestId: App.rid() })); b['上限の行数'] = cap; App.refresh([]); toast('上限の行数を保存しました。'); }
-          catch (error) { i.value = b['上限の行数']; toast('保存できませんでした: ' + error.message, true); }
-        });
-        td.append(i); tr.append(td); t.append(tr);
+    // 1) A3 の番号表の上限の行数
+    const s1 = el('section', 'set-sec'); s1.append(el('h3', '', '番号表（A3）の上限の行数'), el('p', 'hint-line', 'シートごとに3つから選びます。印刷は、選んだ行数に合わせて A3 1枚に自動で縮めます。変えたことは記録に残ります。'));
+    CAP_ROWS.forEach((row) => {
+      const now = Number((C.blockList(state.db, row.table)[0] || {})['上限の行数']);
+      const line = el('div', 'set-row'); const name = el('div', 'set-name'); name.append(el('strong', '', row.label)); if (row.note) name.append(el('small', '', row.note));
+      const group = el('div', 'seg'); group.setAttribute('role', 'radiogroup'); group.setAttribute('aria-label', row.label + 'の上限の行数');
+      row.choices.forEach((cap) => {
+        const b = el('button', 'seg-btn' + (cap === now ? ' is-on' : '')); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(cap === now)); b.dataset.cap = String(cap);
+        b.append(el('strong', '', cap + ' 行')); const e = estText(estimate(row.table, cap)); if (e) b.append(el('small', '', e));
+        b.addEventListener('click', () => saveCap(row, cap, b));
+        group.append(b);
       });
+      line.append(name, group); s1.append(line);
     });
-    root.append(t);
-    root.append(el('p', 'hint-line', '最初の取り込み（実データをスプレッドシートへ入れる）は、本物にする段で行います。'));
+    // 2) A4 の月間商品（自動）
+    const s2 = el('section', 'set-sec'); s2.append(el('h3', '', 'A4 の月間商品（月間特売・新規商品）'), el('p', 'hint-line', '上限は決めず、それぞれ A4 1枚に自動で合わせます（幅いっぱいが基本・行が多いときだけ縮める）。商品名が 8pt より小さくなるときは、空き行を詰め、それでも入らなければアラートで知らせます。'));
+    ['月間特売', '新規商品'].forEach((t) => { const e = estText(estimate(t)); if (e) s2.append(el('p', 'set-est', App.monthText(state.month) + 'の' + t + ': ' + e)); });
+    // 3) 月を消す（いちばん新しい・非公開の月だけ。窓口も同じ決まりで確かめる）
+    const s3 = el('section', 'set-sec'); s3.append(el('h3', '', '月を消す'), el('p', 'hint-line', '試しに作った月などを、まとめて消します。消せるのは、いちばん新しい月で、店に非公開の月だけです。消した月は、データのブックに「消した月_…」のシートとして残ります（元に戻せます）。'));
+    const last = state.months[state.months.length - 1];
+    const why = state.months.length < 2 ? '月が1つだけなので消せません。' : (state.published && state.published.has(last) ? App.monthText(last) + ' は店に公開中です。先に、その月を開いて「店に公開中」を押し、非公開にしてください。' : '');
+    const del = el('button', 'btn btn-danger', last ? App.monthText(last) + ' を消す…' : '消す…'); del.type = 'button'; del.id = 'month-delete'; del.disabled = !last || Boolean(why);
+    const ask = el('div', 'set-ask'); ask.hidden = true;
+    del.addEventListener('click', () => {
+      ask.replaceChildren(el('span', '', App.monthText(last) + ' を消します。よろしいですか？'));
+      const yes = el('button', 'btn btn-danger', '消す'); yes.type = 'button'; yes.id = 'month-delete-yes';
+      const no = el('button', 'btn', 'やめる'); no.type = 'button'; no.addEventListener('click', () => { ask.hidden = true; del.focus(); });
+      yes.addEventListener('click', () => deleteMonth(last, yes));
+      ask.append(yes, no); ask.hidden = false; no.focus();
+    });
+    s3.append(del, ask); if (why) s3.append(el('p', 'hint-line', why));
+    root.append(s1, s2, s3);
+  }
+  async function saveCap(row, cap, b) {
+    if (b.classList.contains('is-on')) return;
+    const done = App.busyButton(b, '保存しています…'); const t0 = performance.now();
+    try {
+      await App.serial(() => App.api('saveCaps', { table: row.table, cap, requestId: App.rid() }));
+      row.tables.forEach((t) => C.blockList(state.db, t).forEach((x) => { x['上限の行数'] = cap; }));
+      App.refresh([]); App.perfNote('上限の行数を変える', t0);
+      toast(row.label + ' の上限の行数を ' + cap + ' 行にしました。');
+    } catch (error) { toast('保存できませんでした: ' + error.message, true); }
+    finally { done(); renderSettings(); }
+  }
+  async function deleteMonth(month, b) {
+    const done = App.busyButton(b, '消しています…'); const t0 = performance.now();
+    try {
+      await App.serial(() => App.api('deleteMonth', { month, requestId: App.rid() }));
+      App.perfNote('月を消す', t0);
+      const back = state.months.filter((m) => m !== month);
+      toast(App.monthText(month) + ' を消しました（データのブックに控えのシートが残っています）。');
+      await App.loadMonth(back[back.length - 1]);
+    } catch (error) { toast('消せませんでした: ' + error.message, true); done(); }
   }
   App.views.settings = { show() { renderSettings(); } };
 })();

@@ -5,7 +5,7 @@
   const App = window.SouzaiApp;
   const { state, $, el, esc, C, SN, toast } = App;
   const FORM_CLASS = App.FORM_CLASS;
-  const FORM_NOTE = { '定番': '番号表に載る', '月間特売': '番号表に載る・ピンクの字', '新商品': '番号表に載る・水色のセル', 'カット商品': '≪カット商品≫ に載る・次の月は終売', '休み': '番号表に載らない', '終売': '番号表に載らない・番号の管理に残す', '計画': '番号表に載らない・番号の管理に残す' };
+  const FORM_NOTE = { '定番': '番号表に載る', '月間特売': '番号表に載る・ピンクの字', '新商品': '番号表に載る・水色のセル', 'カット商品': '≪カット商品≫ に載る・次の月は休み', '休み': '番号表に載らない', '終売': '番号表に載らない・次の月の一覧には載らない', '計画': '番号表に載らない・番号の管理に残す' };
   const CHIPS = ['全部', 'アラート', '抜け', '定番', '月間特売', '新商品', 'カット商品', '休み', '終売', '計画'];
   const view = { built: false, rows: [], rowEls: new Map(), byPid: new Map(), chip: '全部', q: '', terms: null, sec: '', open: '', keys: new Map(), root: null, colCount: 0, menuFor: null, fx: { cell: null, mouse: false } };
   const db = () => state.db;

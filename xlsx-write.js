@@ -143,7 +143,7 @@
     const hf = (o) => (o.l ? '&L' + o.l : '') + (o.c ? '&C' + o.c : '') + (o.r ? '&R' + o.r : '');
     const head = hf(pg.header), foot = hf(pg.footer);
     return XML_HEAD + '<worksheet xmlns="' + MAIN_NS + '" xmlns:r="' + REL_NS + '">'
-      + '<sheetPr>' + (sheet.tabColor ? '<tabColor rgb="FF' + sheet.tabColor + '"/>' : '') + '</sheetPr>'
+      + '<sheetPr>' + (sheet.tabColor ? '<tabColor rgb="FF' + sheet.tabColor + '"/>' : '') + (pg.fit ? '<pageSetUpPr fitToPage="1"/>' : '') + '</sheetPr>'
       + '<dimension ref="A1:' + colName(sheet.lastCol) + sheet.lastRow + '"/>'
       + '<sheetViews><sheetView workbookViewId="0"' + (pg.zoom ? ' zoomScale="' + pg.zoom + '"' : '') + (index === 0 ? ' tabSelected="1"' : '') + '/></sheetViews>'
       + '<sheetFormatPr defaultRowHeight="' + (pg.defaultRowHeight || 15) + '"' + (pg.defaultRowHeight ? ' customHeight="1"' : '') + '/>'
@@ -151,7 +151,7 @@
       + (sheet.merges.length ? '<mergeCells count="' + sheet.merges.length + '">' + sheet.merges.map((x) => '<mergeCell ref="' + x + '"/>').join('') + '</mergeCells>' : '')
       + ((pg.hCenter || pg.vCenter) ? '<printOptions' + (pg.hCenter ? ' horizontalCentered="1"' : '') + (pg.vCenter ? ' verticalCentered="1"' : '') + '/>' : '')
       + '<pageMargins left="' + (m.left ?? 0.7) + '" right="' + (m.right ?? 0.7) + '" top="' + (m.top ?? 0.75) + '" bottom="' + (m.bottom ?? 0.75) + '" header="' + (m.header ?? 0.3) + '" footer="' + (m.footer ?? 0.3) + '"/>'
-      + '<pageSetup' + (pg.paper ? ' paperSize="' + pg.paper + '"' : '') + (pg.scale ? ' scale="' + pg.scale + '"' : '') + ' orientation="' + pg.orientation + '"/>'
+      + '<pageSetup' + (pg.paper ? ' paperSize="' + pg.paper + '"' : '') + (pg.scale ? ' scale="' + pg.scale + '"' : '') + (pg.fit ? ' fitToWidth="1" fitToHeight="1"' : '') + ' orientation="' + pg.orientation + '"/>'
       + ((head || foot) ? '<headerFooter>' + (head ? '<oddHeader>' + xml(head) + '</oddHeader>' : '') + (foot ? '<oddFooter>' + xml(foot) + '</oddFooter>' : '') + '</headerFooter>' : '')
       + (hasDrawing ? '<drawing r:id="rId1"/>' : '')
       + '</worksheet>';

@@ -4,7 +4,8 @@
   //   色は見本どおり（ピンクの字・水色のセル）。見出しの行と左の行番号は動かない。動かす: 区分の見出しを掴むとかたまりごと・商品の行を掴むと1行だけ（処理は App.doMove の1つ）。
   const App = window.SouzaiApp;
   const { state, $, el, C, S, SN, toast } = App;
-  const TABS = ['月間商品', '首都圏', '北関東', '焼き物'];
+  const TABS = C.MONTHLY_SHEETS.concat(C.TABLE_KEYS); // 月間特売・新規商品（A4 縦を1枚ずつ・PO 2026-11-06）・首都圏・北関東・焼き物
+  const isMonthly = (t) => C.MONTHLY_SHEETS.indexOf(t) >= 0;
   const view = { built: false, table: '首都圏', zoom: 'fit', sheet: null, cells: new Map(), dirty: true, merged: '', movePanel: false, drag: null, pick: null, lastRows: 0 };
   const db = () => state.db;
   const colPx = (w) => Math.round((w === null || w === undefined ? 8.43 : Number(w)) * 7 + 5);
@@ -42,9 +43,24 @@
   }
   const visualLen = (s) => { let n = 0; for (const ch of s) n += ch.charCodeAt(0) < 0x2E80 && !/[！-～]/.test(ch) ? 0.55 : 1; return n; };
   function sigOf(cell, text) { return [text, cell.s, cell.fc, cell.fl, cell.runs ? JSON.stringify(cell.runs) : ''].join('|'); }
-  function paintCell(box, cell, styles, w, text) {
+  /** Excel と同じ「はみ出し」: 字がセルに入りきらず、右の見えているセルが空なら、右へはみ出して見せる（はみ出す幅 px）。
+   *  左寄せ・標準の字だけ。折り返し・縮小・つないだセル・数は、Excel でもはみ出さないので 0（2026-11-06 PO「≪日替わり弁当≫ の しば漬け入り≫ が切れる」） */
+  function spillOf(key, e, box, texts, cols, colIndex, styles) {
+    const { cell, c0, text } = e;
+    const raw = cell.f !== undefined ? cell.cached : cell.v;
+    if (!text || typeof raw === 'number' || c0.shrink || box.td.colSpan > 1 || box.td.rowSpan > 1) return 0;
+    const st = styles[cell.s] || {};
+    if (st['折り返し'] === '○' || (st['横の位置'] && st['横の位置'] !== 'left' && st['横の位置'] !== 'general')) return 0;
+    const need = visualLen(text) * c0.fontPx + 4;
+    if (need <= box.w) return 0;
+    const r = Math.floor(key / 2000); let i = colIndex.get(key % 2000) + 1, room = box.w;
+    while (room < need && i < cols.length) { const n = texts.get(r * 2000 + cols[i].c); if (!n || n.text !== '') break; room += cols[i].w; i++; }
+    return Math.max(0, Math.round(Math.min(room, need) - box.w));
+  }
+  function paintCell(box, cell, styles, w, text, spill) {
     const td = box.td; const c = cssOf(styles, cell.s, cell.fc, cell.fl);
     if (box.sx !== c.name) { if (box.sx) td.classList.remove(box.sx); td.classList.add(c.name); box.sx = c.name; }
+    td.classList.toggle('is-spill', spill > 0);
     let shrunk = '';
     if (c.shrink && text) { const need = visualLen(text) * c.fontPx; if (need > w - 4) shrunk = Math.max(7, c.fontPx * (w - 4) / need).toFixed(1) + 'px'; }
     if (td.style.fontSize !== shrunk) td.style.fontSize = shrunk;
@@ -81,7 +97,7 @@
     scroll.addEventListener('pointerdown', onPointerDown);
     view.built = true;
   }
-  function kindNow() { return view.table === '月間商品' ? '' : C.TABLES[view.table].kind; }
+  function kindNow() { return isMonthly(view.table) ? '' : C.TABLES[view.table].kind; }
   function paintBar() {
     const kind = kindNow(); const mode = $('#mode-label'); if (!mode) return;
     const manual = kind && db().status[kind] === '手直し';
@@ -93,7 +109,7 @@
   function paintUsage(preview) {
     const box = $('#usage'); if (!box) return;
     box.replaceChildren();
-    if (view.table === '月間商品') { box.append(monthlySyncBar()); return; }
+    if (isMonthly(view.table)) { box.append(monthlySyncBar(), printLine(view.table)); return; }
     const lay = C.layoutOf(db(), view.table);
     lay.blocks.forEach((b) => {
       const used = preview && preview.used && preview.used[b.no] !== undefined ? preview.used[b.no] : b.used;
@@ -116,6 +132,17 @@
     b.addEventListener('click', () => rebuildMonthly(b));
     bar.append(msg, b);
     return bar;
+  }
+  /** 印刷の見立て（A4 縦 1枚に合わせたときの縮小と商品名の大きさ・詰めた空き行）。決まりは core.js の monthlyPrint の1か所（Excel と同じ） */
+  function printLine(part) {
+    const box = el('div', 'mon-sync'); box.id = 'print-line';
+    const pr = C.monthlyPrint(db(), part); if (!pr) return box;
+    const msg = el('span', 'hint-line');
+    msg.append(document.createTextNode('印刷: A4 縦 1枚・約 ' + pr.scale + '%・商品名 約 '));
+    const pt = pr.namePt.toFixed(1) + 'pt'; msg.append(pr.ok ? document.createTextNode(pt) : el('b', '', pt + '（下限 ' + C.MIN_NAME_PT + 'pt を下回ります）'));
+    if (pr.squeezed) msg.append(document.createTextNode('・空き行を ' + pr.squeezed + ' 行詰めて印刷します'));
+    box.append(msg);
+    return box;
   }
   async function rebuildMonthly(b) {
     const done = App.busyButton(b, '作り直しています…');
@@ -155,7 +182,7 @@
     });
     const structure = cols.map((c) => c.c + ':' + c.w).join(',') + '|' + rowsList.map((r) => (sheet.rowHeights[r] || '') + (r <= (sheet.meta.hr || 0) ? 'h' : '')).join(',') + '|' + sheet.merges.join(',');
     const headRow = sheet.meta.hr || 0;
-    const grabbable = view.table !== '月間商品' && !state.readOnly;
+    const grabbable = !isMonthly(view.table) && !state.readOnly;
     let table = scroll.querySelector('table');
     let updated = 0;
     if (force || !table || view.merged !== structure) {
@@ -184,12 +211,17 @@
       table.append(body);
       scroll.replaceChildren(table);
     }
+    const styles = sheet._db.type.styles, texts = new Map();
     view.cells.forEach((box, key) => {
       const cell = sheet.grid.cells.get(key) || { r: Math.floor(key / 2000), c: key % 2000 };
-      const c0 = cssOf(sheet._db.type.styles, cell.s, cell.fc, cell.fl);
-      const text = textOf(cell, c0.fmt);
-      const sig = sigOf(cell, text);
-      if (sig !== box.sig) { paintCell(box, cell, sheet._db.type.styles, box.w, text); box.sig = sig; updated++; }
+      const c0 = cssOf(styles, cell.s, cell.fc, cell.fl);
+      texts.set(key, { cell, c0, text: textOf(cell, c0.fmt) });
+    });
+    view.cells.forEach((box, key) => {
+      const e = texts.get(key);
+      const spill = spillOf(key, e, box, texts, cols, colIndex, styles);
+      const sig = sigOf(e.cell, e.text) + '|' + spill;
+      if (sig !== box.sig) { paintCell(box, e.cell, styles, box.w, e.text, spill); box.sig = sig; updated++; }
     });
     markGrab(grabbable);
     applyZoom();
@@ -226,7 +258,7 @@
   // ------------------------------------------------------------ ドラッグ（行き先が光る・数字が先に変わる・超えると赤・Esc で取り消し・端で流れる）
   function hitCell(x, y) { const n = document.elementFromPoint(x, y); const td = n && n.closest && n.closest('td[data-r]'); if (!td) return null; return { r: Number(td.dataset.r), c: Number(td.dataset.c), td }; }
   function onPointerDown(e) {
-    if (state.readOnly || e.button !== 0 || e.pointerType === 'touch' || view.table === '月間商品') return;
+    if (state.readOnly || e.button !== 0 || e.pointerType === 'touch' || isMonthly(view.table)) return;
     const hit = hitCell(e.clientX, e.clientY); if (!hit) return;
     const m = metaOf(hit.r, hit.c); if (!m || !m.row) return;
     const item = m.row.kind === 'section' ? { kind: 'sec', id: m.row.secId, from: m.block.no } : { kind: 'row', id: m.row.rowId, secId: m.row.secId, from: m.block.no };
@@ -363,7 +395,7 @@
   }
   function renderMovePanel() {
     const panel = $('#move-panel'); if (!panel) return;
-    if (!view.movePanel || view.table === '月間商品') { panel.hidden = true; return; }
+    if (!view.movePanel || isMonthly(view.table)) { panel.hidden = true; return; }
     panel.hidden = false; panel.replaceChildren(el('h2', '', '名前や番号で選んで、ここに移す'));
     const row = el('div', 'move-row');
     const input = el('input'); input.type = 'search'; input.id = 'move-search'; input.placeholder = '何を: 名前・番号で探す'; input.value = view.moveQ || ''; input.setAttribute('aria-label', '動かす物を探す');

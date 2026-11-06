@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.0）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.1）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.0';
+  const APP_VERSION = 'souzai-number-api-0.2.1';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -294,6 +294,8 @@
     ['#excel-button', '#guide-link'].forEach((s) => { $(s).hidden = false; });
     state.months = data.months || [];
     state.month = data.month;
+    // 店に公開している月（本部・PO の画面だけ受け取る。店は公開の月だけが months に来る）
+    state.published = new Set(C.rowsOf((data.tables && data.tables['月の状態']) || []).filter((r) => r['表の種類'] === PUBLISH_KIND && r['形'] === '公開').map((r) => String(r['月'])));
     state.principal = data.principal;
     state.logRow = Number(data.logRow) || 0;
     state.undo = [];
@@ -317,7 +319,8 @@
     const i = state.months.indexOf(state.month);
     $('#month-prev').disabled = i <= 0; $('#month-next').disabled = i < 0 || i >= state.months.length - 1;
     document.body.classList.toggle('is-view', isView); // 見るだけの人の画面（守りは窓口。画面で隠すだけにしない）
-    $('#month-prev').hidden = isView; $('#month-next').hidden = isView; $('#alert-chip').hidden = isView; $('#save-state').hidden = isView;
+    $('#month-prev').hidden = isView && state.months.length < 2; $('#month-next').hidden = isView && state.months.length < 2; $('#alert-chip').hidden = isView; $('#save-state').hidden = isView; // 店は公開の月が2つ以上あれば選べる
+    paintPublish();
     $('#month-add').hidden = isView; // 月を足す・取り込むのは本部と PO（守りは窓口）
     document.querySelector('[data-view="log"]').hidden = isView;
     $('#account-label').textContent = state.principal.email.split('@')[0];
@@ -336,6 +339,29 @@
     try { return await api('getWorkspace', data); }
     catch (error) { if (error.code === 'DENIED' && data.withCosts) { delete data.withCosts; return api('getWorkspace', data); } throw error; } // 好みを覚えていない端末の、見るだけの人
   }
+  // ------------------------------------------------------------ 店に公開（本部・PO。新しく作った月は非公開から。守りは窓口）
+  const PUBLISH_KIND = '店に公開';
+  function paintPublish() {
+    const b = $('#month-publish'); if (!b) return;
+    b.hidden = state.readOnly || !state.month;
+    const on = state.published && state.published.has(state.month);
+    b.setAttribute('aria-pressed', String(Boolean(on)));
+    b.textContent = on ? '店に公開中' : '店に非公開';
+    b.title = on ? '店のアカウントに、この月を見せています。押すと非公開に戻します' : 'この月は、店のアカウントには見えません。押すと店に公開します';
+  }
+  async function togglePublish(to, b) {
+    const month = state.month; const done = busyButton(b || $('#month-publish'), to ? '公開しています…' : '非公開にしています…');
+    const t0 = performance.now();
+    try {
+      await serial(() => api('setPublished', { month, published: to, requestId: rid() }));
+      if (to) state.published.add(month); else state.published.delete(month);
+      perfNote('店に公開を切り替える', t0);
+      toast(monthText(month) + (to ? ' を店に公開しました。店の画面で選べます。' : ' を店に非公開にしました。'), false, { label: '元に戻す', run: () => togglePublish(!to) });
+    } catch (error) { toast('切り替えられませんでした: ' + error.message, true); }
+    finally { done(); paintPublish(); }
+  }
+  $('#month-publish').addEventListener('click', (e) => togglePublish(!(state.published && state.published.has(state.month)), e.currentTarget));
+
   async function loadMonth(month) {
     if (hasUnsaved()) { flush(); await save.chain; }
     const t0 = performance.now();

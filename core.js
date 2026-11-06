@@ -10,7 +10,7 @@
   const KIND_PRODUCT = '商品', KIND_BLANK = '空き行', KIND_CONT = '続きの行', KIND_SECTION = '節の見出し';
   // 販売形態（PO 2026-11-05）: 1つの欄で選ぶ6つ。定番・月間特売・新商品は表に載る。休み・終売・計画は載らない（番号の管理のために一覧には残す）。
   //   番号表の色（ピンクの字・水色のセル）もここから付く。月間特売と新商品だけ両方選べる（Q9・10月は12商品）。欄は1つのまま、両方のときの値が「月間特売・新商品」
-  //   カット商品（PO 2026-11-06）: 表に載る。行は ≪カット商品≫ の区分へ動く（表の種類をまたぐ）。1つだけ選ぶ。次の月を作ると終売になり、元の区分へ戻る
+  //   カット商品（PO 2026-11-06）: 表に載る。行は ≪カット商品≫ の区分へ動く（表の種類をまたぐ）。1つだけ選ぶ。次の月を作ると休みになり（PO 2026-11-06「終売ではなく翌月は休み」）、元の区分へ戻る
   const FORM_REGULAR = '定番', FORM_SALE = '月間特売', FORM_NEW = '新商品', FORM_SALE_NEW = '月間特売・新商品', FORM_CUT = 'カット商品', FORM_REST = '休み', FORM_END = '終売', FORM_PLAN = '計画';
   const FORMS = [FORM_REGULAR, FORM_SALE, FORM_NEW, FORM_CUT, FORM_REST, FORM_END, FORM_PLAN];
   const FORMS_ALL = [FORM_REGULAR, FORM_SALE, FORM_NEW, FORM_SALE_NEW, FORM_CUT, FORM_REST, FORM_END, FORM_PLAN];
@@ -108,6 +108,29 @@
     if (props && to > from) out.push([from, to, props]);
     return out.sort((x, y) => x[0] - y[0]);
   }
+  // ピンクの字＝月間特売の印。販売形態から付ける物で、名前の飾りには持たない（PO 2026-11-06。手作りの表で名前の一部だけピンクの物が、飾りとして残っていた）
+  const SALE_FONTS = ['FF00FF', 'FF3399', 'FF33CC'];
+  const isSaleFont = (rgb) => SALE_FONTS.indexOf(String(rgb || '').toUpperCase()) >= 0;
+  /** 飾りからピンクの色を外す（ほかの飾りは残す・何も残らない部分は消す） */
+  function dropSaleColor(runs) {
+    if (!Array.isArray(runs)) return runs;
+    const out = [];
+    runs.forEach((r) => { const p = Object.assign({}, r[2] || {}); if (isSaleFont(p.c)) delete p.c; if (Object.keys(p).length) out.push([r[0], r[1], p]); });
+    return out;
+  }
+  /** 商品の飾り（{名前, 北関東: {名前}, …}）の名前からピンクを外した写し */
+  function cleanNameDeco(deco) {
+    if (!deco || typeof deco !== 'object') return {};
+    const out = Object.assign({}, deco);
+    if (Array.isArray(out['名前'])) out['名前'] = dropSaleColor(out['名前']);
+    if (out['北関東'] && typeof out['北関東'] === 'object' && Array.isArray(out['北関東']['名前'])) out['北関東'] = Object.assign({}, out['北関東'], { '名前': dropSaleColor(out['北関東']['名前']) });
+    return out;
+  }
+  /** 番号表・Excel の名前の飾り: 月間特売（rgb＝その行のピンク）なら色の無い部分もピンクに、そうでなければピンクを外す。
+   *  Excel は飾りの部分に色が無いと黒で出す（セルの字の色を継がない）ので、画面と Excel をそろえるためにここで色を決める */
+  function saleRuns(runs, rgb) {
+    return (runs || []).map((r) => { const p = Object.assign({}, r[2] || {}); if (isSaleFont(p.c)) delete p.c; if (rgb && !p.c) p.c = rgb; return [r[0], r[1], p]; }).filter((r) => Object.keys(r[2]).length);
+  }
 
   // ---------------------------------------------------------------- 入数（名前の中のカッコと連動。列には持たない＝二重にしない）
   const QTY_RE = /([(（])\s*([0-9０-９]+)\s*([^\d０-９()（）]{1,4}?)\s*([)）])\s*$/;
@@ -134,7 +157,7 @@
   /** tables: { 商品, 区分, 月の行, 月の置き場, 月の状態, 月間商品, 選べる値, 過去の番号, 疑問, 確かめ済み }（compact か、行の配列）。type: 表の型 */
   function makeDb(tables, type, month) {
     const db = { month: month || '', products: new Map(), rows: new Map(), sections: new Map(), places: new Map(), status: {}, monthly: [], options: {}, past: [], doubts: [], checked: new Set(), type: null, costs: null, costInfo: { empty: [], grossOut: [], badForm: [] } };
-    rowsOf(tables['商品']).forEach((p) => { p._deco = parseDeco(p['字の飾り']); db.products.set(String(p['商品ID']), p); });
+    rowsOf(tables['商品']).forEach((p) => { p._deco = cleanNameDeco(parseDeco(p['字の飾り'])); db.products.set(String(p['商品ID']), p); });
     rowsOf(tables['月の行']).forEach((r) => { prepRow(r); db.rows.set(String(r['行ID']), r); });
     rowsOf(tables['区分']).forEach((s) => { s._diff = parseDeco(s['北関東の違い']); s._deco = parseDeco(s['字の飾り']); db.sections.set(String(s['区分ID']), s); });
     rowsOf(tables['月の置き場']).forEach((p) => { db.places.set(String(p['区分ID']), p); });
@@ -312,16 +335,35 @@
   }
 
   // ---------------------------------------------------------------- 次の月を作る（アップロードなし・前の月の形から）
-  /** 次の月の販売形態: 月間特売・新商品は定番へ、カット商品は終売へ。ほかはそのまま（特売価格は残す） */
-  function nextForm(f) { if (isSaleForm(f) || isNewForm(f)) return FORM_REGULAR; if (isCutForm(f)) return FORM_END; return f; }
+  /** 次の月の販売形態: 月間特売・新商品は定番へ、カット商品は休みへ（終売ではない・PO 2026-11-06）。ほかはそのまま（特売価格は残す） */
+  function nextForm(f) { if (isSaleForm(f) || isNewForm(f)) return FORM_REGULAR; if (isCutForm(f)) return FORM_REST; return f; }
   /** 前の月の 月の行・月の置き場・月間商品（{c, r}）から、次の月の物を作る。元の形（元の区分ID・元の順・元のまとまり・元の順）は、前の月の最後の形。
-   *  カット商品は終売にして、元の区分へ戻す。月間商品は節の見出しと空き行だけ残す（中身は一覧の販売形態から作り直す）。返す値: { rows, places, monthly, counts } */
+   *  カット商品は休みにして、元の区分へ戻す。終売の商品（とつながる続きの行）は持ち越さない。月間商品は節の見出しと空き行だけ残す（中身は一覧の販売形態から作り直す）。返す値: { rows, places, monthly, counts } */
   function nextMonthTables(src) {
-    const counts = { rows: 0, sale: 0, fresh: 0, cut: 0, monthlyDropped: 0 };
+    const counts = { rows: 0, sale: 0, fresh: 0, cut: 0, ended: 0, monthlyDropped: 0 };
     const rc = src.rows.c; const ix = (k) => rc.indexOf(k);
     const iForm = ix('販売形態'), iSec = ix('区分ID'), iOrd = ix('順'), iHome = ix('元の区分ID'), iHomeOrd = ix('元の順'), iDiff = ix('北関東の違い');
-    const rows = (src.rows.r || []).map((r0) => {
+    const iPid = ix('商品ID'), iJoin = ix('つなぐ'), iCont = ix('続き');
+    // 終売の商品は、次の月の一覧に持ち越さない（PO 2026-11-06「終売品は BY が設定した月の翌月からは表示されない」）。その商品につながる続きの行も。
+    // 後ろにつながった別の商品が終売でなければ、その商品を頭にする（つなぐを外す）。番号がぶつかる確かめは、行の無い商品も終売として数える（alertsOf）
+    const src0 = src.rows.r || []; const drop = new Set(); const unjoin = new Set(); const bySec = new Map();
+    src0.forEach((r, k) => { const sid = String(r[iSec]); if (!bySec.has(sid)) bySec.set(sid, []); bySec.get(sid).push(k); });
+    bySec.forEach((list) => {
+      list.sort((a, b) => Number(src0[a][iOrd]) - Number(src0[b][iOrd]));
+      list.forEach((k, n) => {
+        const r = src0[k]; if (!r[iPid] || String(r[iForm] || '') !== FORM_END || drop.has(k)) return;
+        drop.add(k); counts.ended++;
+        for (let j = n + 1; j < list.length; j++) {
+          const x = src0[list[j]]; const joined = x[iJoin] === '○' || (!x[iPid] && !isBlank(x[iCont]));
+          if (!joined) break;
+          if (x[iPid] && String(x[iForm] || '') !== FORM_END) { unjoin.add(list[j]); break; }
+          drop.add(list[j]); if (x[iPid]) counts.ended++;
+        }
+      });
+    });
+    const rows = src0.filter((_, k) => !drop.has(k)).map((r0) => {
       const r = r0.slice(); const f = String(r[iForm] || '');
+      if (unjoin.has(src0.indexOf(r0))) r[iJoin] = '';
       if (isSaleForm(f)) counts.sale++;
       if (isNewForm(f)) counts.fresh++;
       if (isCutForm(f)) { counts.cut++; if (!isBlank(r[iHome])) { r[iSec] = r[iHome]; r[iOrd] = Number(r[iHomeOrd]) + 0.001; } }
@@ -423,6 +465,89 @@
     return { rows: out, added: sync.missing.length, removed };
   }
 
+  // ---------------------------------------------------------------- 印刷の見立て（PO 2026-11-06: どのシートも1枚に合わせる・幅いっぱいが基本・商品名は 8pt まで）
+  //   縮小は、印刷するときに Excel の「1ページに合わせる」が決める。ここは同じ決まりで先に見立てる（空き行を詰めるか・アラート・設定の画面・Excel に入れておく縮小）。
+  //   ASSUMPTIONS（2026-11-06 この PC の Excel で測った）: ① 列の幅 1 ＝ 8px（ＭＳ Ｐゴシック 11 の数字の幅。Excel の Range.Width と合う）
+  //   ② 印刷では、列の幅が画面の大きさ×縮小の 0.918〜0.923 倍・行の高さが 0.908〜0.911 倍になり、字は縮小のとおり
+  //      （PDF に書き出して、1枚に入る最大の縮小を7つの形で探し、字の大きさも測った）。見立ては測った幅の大きい端（縮小を小さめ＝字を小さめに見る側）。7つとも Excel と同じ縮小になった
+  const PAPER_PT = { 8: [841.89, 1190.55], 9: [595.28, 841.89] }; // 用紙の番号 → 縦長に置いたときの幅と高さ（A3・A4・pt）
+  const COL_PX = 8, PRINT_GRID_W = 0.9225, PRINT_GRID_H = 0.911, MIN_NAME_PT = 8;
+  const MONTHLY_TABLE = '月間商品';
+  const MONTHLY_SHEETS = ['月間特売', '新規商品']; // 月間商品は部ごとに1枚（A4 縦）。表の型は1つのまま、画面と Excel の側で分ける
+  const MONTHLY_MARGIN = { top: 5 / 25.4, bottom: 4 / 25.4, header: 0, footer: 0 }; // インチ（上 5mm・下 4mm・ヘッダーとフッターは中身が無い）。左右は表の型のまま（3mm）
+  const colNo = (s) => { let n = 0; const t = String(s || ''); for (let i = 0; i < t.length; i++) n = n * 26 + t.charCodeAt(i) - 64; return n; };
+  const boxMemo = typeof WeakMap === 'function' ? new WeakMap() : null;
+  /** 行に依らない物: 用紙と余白から使える幅と高さ・列の幅の計・行の高さ（表の型の決まったセル）・商品名の字の大きさ。表の型ごとに1回だけ数える */
+  function printBox(db, table) {
+    const type = db.type; if (!type) return null;
+    let memo = boxMemo ? boxMemo.get(type) : null; if (!memo) { memo = {}; if (boxMemo) boxMemo.set(type, memo); }
+    if (memo[table]) return memo[table];
+    const part = MONTHLY_SHEETS.indexOf(table) >= 0 ? table : '';
+    const key = part ? MONTHLY_TABLE : table;
+    const sh = type.shapes[key]; if (!sh) return null;
+    const block = part ? (type.blocks[key] || []).find((b) => b['まとまり'] === part) : null;
+    if (part && !block) return null;
+    const shift = block ? Number(block['題の行']) - 1 : 0;
+    const byCol = {}; (type.columns[key] || []).forEach((c) => { byCol[colNo(c['列'])] = c; });
+    let px = 0; const lastCol = colNo(sh['印刷の右の列']);
+    for (let c = 1; c <= lastCol; c++) { const d = byCol[c]; if (d && d['隠し'] === '○') continue; px += Math.round((d && !isBlank(d['幅']) ? Number(d['幅']) : 8.43) * COL_PX); }
+    const heights = {};
+    (type.fixed[key] || []).forEach((f) => { if (f['種類'] !== '行の高さ' || isBlank(f['値']) || (part && f['まとまり'] !== part)) return; heights[Number(f['セル']) - shift] = Number(f['値']); });
+    const hidden = {}; String(sh['隠す行'] || '').split(',').forEach((r) => { if (String(r).trim()) hidden[Number(r)] = true; });
+    const size = (k) => { const s = type.styles[k]; return s && s['大きさ'] ? Number(s['大きさ']) : Number(sh['標準の字の大きさ']) || 11; };
+    let namePt0 = 0;
+    (type.columns[key] || []).forEach((c) => { if (c['役割'] === (part ? '商品名' : '名前') && c['隠し'] !== '○') { const s = size(c['書式（商品）']); namePt0 = namePt0 ? Math.min(namePt0, s) : s; } });
+    const paper = PAPER_PT[Number(sh['用紙'])] || PAPER_PT[9];
+    const land = (sh['向き'] || 'landscape') === 'landscape';
+    const m = (k, def) => (isBlank(sh[k]) ? def : Number(sh[k]));
+    const margins = { left: m('余白（左）', 0.7), right: m('余白（右）', 0.7), top: part ? MONTHLY_MARGIN.top : m('余白（上）', 0.75), bottom: part ? MONTHLY_MARGIN.bottom : m('余白（下）', 0.75), header: part ? MONTHLY_MARGIN.header : m('余白（ヘッダー）', 0.3), footer: part ? MONTHLY_MARGIN.footer : m('余白（フッター）', 0.3) };
+    const box = { table, part, shift, margins, widthPt: px * 0.75, heights, hidden, defaultH: Number(sh['既定の行の高さ']) || 15, namePt0: namePt0 || 11,
+      usableW: (land ? paper[1] : paper[0]) - (margins.left + margins.right) * 72, usableH: (land ? paper[0] : paper[1]) - (margins.top + margins.bottom) * 72,
+      start: block ? Number(block['本文の最初の行']) - shift : 0, cap: block ? Number(block['上限の行数']) : 0, lastBody: Number(sh['本文の最後の行']) || 0 };
+    memo[table] = box;
+    return box;
+  }
+  /** from〜to 行の高さの計（隠す行は 0・決まりの無い行は既定の高さ） */
+  function rowsHeight(box, from, to) { let h = 0; for (let r = from; r <= to; r++) if (!box.hidden[r]) h += box.heights[r] !== undefined ? box.heights[r] : box.defaultH; return h; }
+  /** 1枚に合わせたときの縮小（整数の %・10〜100）。byW・byH は幅だけ・高さだけで決めた倍率（丸める前） */
+  function fitScale(box, heightPt) {
+    const byW = box.usableW / (box.widthPt * PRINT_GRID_W), byH = heightPt > 0 ? box.usableH / (heightPt * PRINT_GRID_H) : 9;
+    return { scale: Math.max(10, Math.min(100, Math.floor(Math.min(byW, byH) * 100 + 1e-9))), byW, byH };
+  }
+  const namePtOf = (box, scale) => Math.round(box.namePt0 * scale) / 100;
+  /** 月間特売・新規商品の1枚: 載せる行（空き行を詰めた後）・本文の行数（空いた所は、字を小さくしない分だけ上限まで空の行で埋める）・縮小・商品名の字の大きさ。
+   *  商品名が 8pt を下回るときだけ、いちばん長く続く空き行から1行ずつ詰める。詰めても足りなければ ok=false と、あと何行減らせばよいか（drop） */
+  function monthlyPrint(db, part) {
+    const box = printBox(db, part); if (!box) return null;
+    const all = db.monthly.filter((g) => g['部'] === part).sort(byOrder);
+    const headH = rowsHeight(box, 1, box.start - 1);
+    const fitOf = (n) => fitScale(box, headH + rowsHeight(box, box.start, box.start + n - 1));
+    const rows = all.slice(); let squeezed = 0;
+    let fit = fitOf(rows.length);
+    while (namePtOf(box, fit.scale) < MIN_NAME_PT) {
+      let at = -1, best = 0, run = 0;
+      rows.forEach((g, i) => { if (g['行の種類'] === KIND_BLANK) { run++; if (run > best) { best = run; at = i; } } else run = 0; });
+      if (at < 0) break;
+      rows.splice(at, 1); squeezed++; fit = fitOf(rows.length);
+    }
+    let body = rows.length;
+    while (body < box.cap && fitOf(body + 1).byH >= fit.byW) body++;
+    let drop = 0;
+    if (namePtOf(box, fit.scale) < MIN_NAME_PT) { while (drop < rows.length && namePtOf(box, fitOf(rows.length - drop).scale) < MIN_NAME_PT) drop++; }
+    const namePt = namePtOf(box, fit.scale);
+    return { table: part, rows, body, squeezed, blanks: all.filter((g) => g['行の種類'] === KIND_BLANK).length, scale: fit.scale, byWidth: Math.min(100, Math.floor(fit.byW * 100 + 1e-9)), namePt, ok: namePt >= MIN_NAME_PT, drop, box };
+  }
+  /** 番号表（A3）の1枚: 本文は上限の行数まで（capOverride＝設定の画面で選ぶ上限の行数の見立て）。載せた行が上限を超えれば、その行まで */
+  function numberPrint(db, table, capOverride, lay) {
+    const box = printBox(db, table); if (!box) return null;
+    const L = lay || layoutOf(db, table);
+    let last = box.lastBody;
+    L.blocks.forEach((b) => { const cap = Number(capOverride) || b.cap; last = Math.max(last, b.row0 + cap - 1, b.row0 + b.used - 1); });
+    const fit = fitScale(box, rowsHeight(box, 1, last));
+    const namePt = namePtOf(box, fit.scale);
+    return { table, lastRow: last, scale: fit.scale, byWidth: Math.min(100, Math.floor(fit.byW * 100 + 1e-9)), namePt, ok: namePt >= MIN_NAME_PT, box };
+  }
+
   /** 変える欄を手元に当てる。t: 商品・行・置き場・月間・状態 */
   function applyChanges(db, changes) {
     (changes || []).forEach((c) => {
@@ -434,12 +559,12 @@
       else if (c.t === '区分') o = db.sections.get(String(c.id));
       else if (c.t === '状態') { db.status[c.id] = c.f['形']; return; }
       else if (c.t === '原価') { if (db.costs) { const r = db.costs.get(String(c.id)) || {}; Object.assign(r, c.f); db.costs.set(String(c.id), r); } return; }
-      else if (c.t === '新しい商品') { const p = Object.assign({}, c.f, { '商品ID': String(c.id) }); p._deco = parseDeco(p['字の飾り']); db.products.set(String(c.id), p); return; }
+      else if (c.t === '新しい商品') { const p = Object.assign({}, c.f, { '商品ID': String(c.id) }); p._deco = cleanNameDeco(parseDeco(p['字の飾り'])); db.products.set(String(c.id), p); return; }
       else if (c.t === '消す商品') { const pid = String(c.id); db.products.delete(pid); db.rows.forEach((r, id) => { if (String(r['商品ID']) === pid) db.rows.delete(id); }); if (db.costs) db.costs.delete(pid); return; }
       else if (c.t === '新しい行') { db.rows.set(String(c.id), prepRow(Object.assign({}, c.f, { '行ID': String(c.id) }))); return; }
       else if (c.t === '確かめ済み') { if (c.f && c.f['済み'] === false) db.checked.delete(String(c.id)); else db.checked.add(String(c.id)); return; }
       if (!o) return;
-      Object.keys(c.f || {}).forEach((k) => { o[k] = c.f[k]; if (k === '字の飾り') o._deco = parseDeco(c.f[k]); if (k === '北関東の違い') o._diff = parseDeco(c.f[k]); if (k === '続き') o._cont = parseDeco(c.f[k]); });
+      Object.keys(c.f || {}).forEach((k) => { o[k] = c.f[k]; if (k === '字の飾り') o._deco = c.t === '商品' ? cleanNameDeco(parseDeco(c.f[k])) : parseDeco(c.f[k]); if (k === '北関東の違い') o._diff = parseDeco(c.f[k]); if (k === '続き') o._cont = parseDeco(c.f[k]); });
     });
   }
   /** 手元と違う欄を元に戻すための、前の値（元に戻す・記録に使う） */
@@ -617,12 +742,18 @@
         else if (g['部'] === '新規商品' && !db.checked.has('newmiss:' + key)) A(LEVEL_CHECK, '新規商品が番号表に無い', 'newmiss:' + key, '新規商品 ' + nfkc(name).trim() + '（' + c + '）が番号表にありません', '番号表に載せるか、このままでよいか', { monthly: key });
       }
     });
-    // 月間商品と一覧の販売形態の食い違い（番号表の「月間商品」で作り直すと消える）
+    // 月間商品と一覧の販売形態の食い違い（番号表の「月間特売」「新規商品」のタブで作り直すと消える）
     if (db.monthly.length) {
       const sync = monthlySync(db);
-      if (sync.missing.length) A(LEVEL_FIX, '月間商品に無い', 'monsync:missing', '月間特売・新商品にした ' + sync.missing.length + ' 商品が、月間商品にありません', '番号表の「月間商品」で「一覧から作り直す」を押す', { monthlySync: true });
-      if (sync.extra.length && !db.checked.has('monsync:extra')) A(LEVEL_CHECK, '月間商品に余分', 'monsync:extra', '月間商品に、もう月間特売・新商品でない ' + sync.extra.length + ' 商品があります', '番号表の「月間商品」で「一覧から作り直す」を押すか、このままでよいか', { monthlySync: true });
+      if (sync.missing.length) A(LEVEL_FIX, '月間商品に無い', 'monsync:missing', '月間特売・新商品にした ' + sync.missing.length + ' 商品が、月間商品にありません', '番号表の「月間特売」か「新規商品」のタブで「一覧から作り直す」を押す', { monthlySync: true });
+      if (sync.extra.length && !db.checked.has('monsync:extra')) A(LEVEL_CHECK, '月間商品に余分', 'monsync:extra', '月間商品に、もう月間特売・新商品でない ' + sync.extra.length + ' 商品があります', '番号表の「月間特売」か「新規商品」のタブで「一覧から作り直す」を押すか、このままでよいか', { monthlySync: true });
     }
+    // 印刷の字の大きさ（A4 の月間特売・新規商品を1枚に合わせたときの商品名）。空き行は先に詰めて見立てる（Excel も同じ部品で詰める）
+    if (db.type) MONTHLY_SHEETS.forEach((part) => {
+      const pr = monthlyPrint(db, part); if (!pr || pr.ok) return;
+      A(LEVEL_FIX, '印刷の字が小さい', 'print:' + part, part + ' を A4 1枚に入れると、商品名が約 ' + pr.namePt.toFixed(1) + 'pt になります（下限 ' + MIN_NAME_PT + 'pt・' + pr.rows.length + ' 行）',
+        (pr.squeezed ? '空き行を ' + pr.squeezed + ' 行詰めても入りません。' : '') + '行をあと ' + pr.drop + ' 行減らすと ' + MIN_NAME_PT + 'pt 以上になります（見出し・続きの行も1行）', { table: part });
+    });
     // 続きの行に価格
     db.rows.forEach((r) => {
       if (r['行の種類'] !== KIND_CONT || !rowOn(r)) return;
@@ -695,5 +826,6 @@
 
   root.SouzaiCore = { TABLES, TABLE_KEYS, KIND_TABLES, KINDS, KIND_PRODUCT, KIND_BLANK, KIND_CONT, KIND_SECTION, FORMS, FORMS_ALL, FORM_REGULAR, FORM_SALE, FORM_NEW, FORM_SALE_NEW, FORM_CUT, FORM_REST, FORM_END, FORM_PLAN, ADDED_MARK, isAddedProduct, normTray, showCell, shownPriceKey, shownPrice, isOffForm, formHas, toggleForm, productForms, freeCalls, isSaleForm, isNewForm, isCutForm, formOf, rowOn, rowRegion, COST_KEYS, GROSS_LOW, GROSS_HIGH, LEVEL_FIX, LEVEL_CHECK, EDITABLE,
     isCutSection, cutSectionOf, formChanges, nextForm, nextMonthTables, nextMonthOf, MONTHLY_COLS, monthlyWanted, monthlySync, monthlyReconcile, splitSmall,
-    isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, parseDeco, editRuns, paintRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
+    MONTHLY_TABLE, MONTHLY_SHEETS, MONTHLY_MARGIN, MIN_NAME_PT, printBox, monthlyPrint, numberPrint,
+    isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, parseDeco, editRuns, paintRuns, SALE_FONTS, isSaleFont, dropSaleColor, cleanNameDeco, saleRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

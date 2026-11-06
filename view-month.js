@@ -7,7 +7,7 @@
   const App = window.SouzaiApp;
   const { $, el, C, state, toast, busyButton, api, rid, monthText } = App;
   const M = window.SouzaiImportMerge;
-  const V = '0.2.0';
+  const V = '0.2.1';
   const panel = $('#month-panel'), button = $('#month-add');
   const queue = []; // { key, file, name, status: 'reading'|'ready'|'bad'|'dup'|'done', kind, month, result, merge, summary, note, rid }
   let costsMemo = null; // 比べるための原価（この画面の中だけ・端末に残さない）
@@ -41,7 +41,7 @@
     // 左: 前の月から作る
     const a = el('div', 'mp-card');
     a.append(el('h3', '', '前の月から作る（アップロードなし）'), el('p', '', monthText(to) + ' を、' + monthText(from) + ' の形から作ります。'));
-    const ul = el('ul'); ['月間特売・新商品 → 定番（特売価格は残ります）', 'カット商品 → 終売（元の区分へ戻ります）', '並び・置き場・休み・終売・計画は、そのまま', '月間商品は見出しだけ。月間特売・新商品を決めたら、番号表の「月間商品」で「一覧から作り直す」'].forEach((t) => ul.append(el('li', '', t)));
+    const ul = el('ul'); ['月間特売・新商品 → 定番（特売価格は残ります）', 'カット商品 → 休み（元の区分へ戻ります）', '並び・置き場・休み・計画は、そのまま', '終売の商品 → 次の月の一覧に載りません（番号の確かめには残ります）', '月間商品は見出しだけ。月間特売・新商品を決めたら、番号表の「月間特売」か「新規商品」のタブで「一覧から作り直す」'].forEach((t) => ul.append(el('li', '', t)));
     const make = el('button', 'btn btn-primary', '＋ ' + monthText(to) + ' を作る'); make.type = 'button'; make.id = 'month-make';
     make.addEventListener('click', () => createNext(make, from, to));
     a.append(ul, make);
@@ -76,7 +76,7 @@
       close();
       await App.loadMonth(to);
       const c = data.counts || {};
-      toast(monthText(to) + ' を作りました（月間特売 ' + (c.sale || 0) + '・新商品 ' + (c.fresh || 0) + ' を定番に、カット商品 ' + (c.cut || 0) + ' を終売に）。');
+      toast(monthText(to) + ' を作りました（月間特売 ' + (c.sale || 0) + '・新商品 ' + (c.fresh || 0) + ' を定番に、カット商品 ' + (c.cut || 0) + ' を休みに' + (c.ended ? '・終売 ' + c.ended + ' は持ち越さず' : '') + '）。店にはまだ非公開です。');
     } catch (error) {
       if (error.code === 'SESSION') App.showLogin(error.message); else toast('作れませんでした: ' + error.message, true);
     } finally { done(); }
@@ -300,7 +300,7 @@
     await App.serial(() => api('replaceMonthly', { month: r.month, rows: { c: C.MONTHLY_COLS, r: res.rows.map((g) => C.MONTHLY_COLS.map((h) => (g[h] === undefined || g[h] === null ? '' : g[h]))) }, label: 'サマリーから', requestId: q.rid }));
     db.monthly = res.rows; App.refresh([]);
     const asked = (plan.toPick || []).length;
-    return made + monthText(r.month) + 'の月間特売に ' + (plan.rows || []).filter((g) => g['行の種類'] === C.KIND_PRODUCT).length + ' 行を入れました（番号表の行 ' + changes.length + ' か所' + (asked ? '・商品に結んでいない行 ' + asked + '＝番号表の「月間商品」で確かめる' : '') + '）';
+    return made + monthText(r.month) + 'の月間特売に ' + (plan.rows || []).filter((g) => g['行の種類'] === C.KIND_PRODUCT).length + ' 行を入れました（番号表の行 ' + changes.length + ' か所' + (asked ? '・商品に結んでいない行 ' + asked + '＝番号表の「月間特売」か「新規商品」のタブで確かめる' : '') + '）';
   }
 
   // ------------------------------------------------------------ 最初の取り込み（PO だけ・1回だけ）

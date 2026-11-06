@@ -1,28 +1,113 @@
-/* ご利用ガイド（全システム共通の型: 左に目次・右に本文・連動） */
+/* ご利用ガイド（全システム共通の型: 左に目次・右に本文・連動）。節ごとに、まず図（写真に番号の丸／流れの箱／色の見本）。文は図の補い */
 .guide-scroll { flex: 1; min-height: 0; overflow: auto; background: #fff; }
 .guide-status { padding: 16px; margin: 0; }
-.guide-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; padding: 14px 16px 60px; }
+.guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 14px 16px 60px; }
 .guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
 .guide-toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 4px solid transparent; }
 .guide-toc a:hover { background: #eef2f7; }
 .guide-toc a.is-current { background: var(--brand-soft); border-left-color: var(--brand); font-weight: 700; }
-.guide-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; list-style: none; padding: 0; margin: 0 0 18px; }
-.guide-flow li { background: #f3f7fb; border: 1px solid #bcd3e6; border-radius: 8px; padding: 6px 10px; max-width: 220px; }
-.guide-flow li.arrow { background: none; border: 0; padding: 0; align-self: center; font-size: 18px; color: var(--ink2); }
-.guide-flow strong { display: block; }
-.guide-flow span { font-size: 13.5px; color: var(--ink2); }
-.guide-section { scroll-margin-top: 10px; border-top: 1px solid var(--line); padding: 12px 0; }
+.guide-section { scroll-margin-top: 10px; border-top: 1px solid var(--line); padding: 16px 0 20px; content-visibility: auto; contain-intrinsic-size: auto 640px; } /* 画面の外の節は描かない（開く速さ）。印刷では全部描く */
 .guide-section:first-of-type { border-top: 0; }
-.guide-section h2 { font-size: 18px; margin: 0 0 6px; }
-.guide-section ul { margin: 0; padding-left: 1.3em; }
-.guide-section li { margin-bottom: 5px; font-size: 16px; }
+.guide-section h2 { font-size: 19px; margin: 0 0 10px; }
 .guide-section.is-landing { animation: guide-flash 1s ease-out; }
 @keyframes guide-flash { from { background: #fff7c2; } to { background: transparent; } }
+
+/* 番号の丸（写真の上・手順の頭・流れの箱で同じ形・同じ色） */
+.gnum { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #c2410c; color: #fff; font-weight: 800; font-size: 14px; line-height: 1; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, .35); flex: none; }
+
+/* 写真＋手順（横長の写真は手順が下に回る・細い写真と縦長の写真は手順が横に並ぶ＝丸と説明を目を動かさずに見比べる） */
+.gpair { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-start; }
+.gshot { margin: 0; flex: 1 1 100%; min-width: 0; }
+.gpair.is-side .gshot { flex: 0 1 calc(var(--gw) + 28px); max-width: 64%; }
+.gpair.is-side .gsteps { grid-template-columns: minmax(0, 1fr); }
+.gshot-scroll { overflow-x: auto; padding: 14px; background: #eef1f5; border-radius: 10px; }
+.gshot-frame { position: relative; width: 100%; max-width: var(--gw, 100%); margin: 0 auto; container-type: inline-size; }
+.gshot-frame img { display: block; width: 100%; height: auto; border: 1px solid var(--line2); border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.gshot.is-zoom .gshot-frame { width: var(--gw); max-width: none; }
+.gshot-frame .gmark { position: absolute; transform: translate(-50%, -50%); z-index: 2; transition: transform .12s; width: clamp(17px, 2.3cqw, 24px); height: clamp(17px, 2.3cqw, 24px); font-size: clamp(11px, 1.3cqw, 14px); } /* 写真が小さいときは丸も少し小さく（重ならない） */
+.gshot-frame .gmark.is-hot { transform: translate(-50%, -50%) scale(1.3); background: #9a3412; }
+.gbox { position: absolute; z-index: 1; border: 3px solid #c2410c; border-radius: 5px; background: rgba(194, 65, 12, .08); opacity: 0; transition: opacity .12s; pointer-events: none; }
+.gbox.is-hot { opacity: 1; }
+.gcap { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--ink2); margin-top: 4px; }
+.gsteps { list-style: none; margin: 0; padding: 0; flex: 1 1 280px; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 4px 18px; align-content: start; }
+.gsteps li { position: relative; padding: 5px 8px 5px 38px; border-radius: 7px; font-size: 15px; line-height: 1.45; color: var(--ink2); cursor: default; }
+.gsteps li .gnum { position: absolute; left: 6px; top: 5px; }
+.gsteps li strong { color: var(--ink); font-size: 16px; margin-right: 6px; }
+.gsteps li.is-hot { background: #fff1e6; }
+.gnotes { margin: 12px 0 0; padding-left: 1.3em; }
+.gnotes li { margin-bottom: 4px; font-size: 16px; }
+
+/* 流れの箱・並べた箱 */
+.gflow-list { list-style: none; margin: 0; padding: 4px 0 0 10px; display: flex; flex-wrap: wrap; gap: 14px 30px; align-items: stretch; }
+.gflow-step { position: relative; flex: 1 1 170px; max-width: 300px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 12px 12px; border: 1px solid #bcd3e6; border-radius: 10px; background: #f6f9fc; }
+.gflow-step > .gnum { position: absolute; top: -10px; left: -10px; }
+.gflow:not(.gcards) .gflow-step:not(:last-child)::after { content: '→'; position: absolute; right: -25px; top: 50%; transform: translateY(-50%); font-size: 20px; font-weight: 700; color: var(--ink2); }
+.gflow-step strong { font-size: 16px; }
+.gflow-t { font-size: 14.5px; color: var(--ink2); }
+.gflow-ui { display: flex; align-items: center; min-height: 40px; }
+.gcards .gflow-step { max-width: 380px; }
+
+/* 画面の部品の見本（色と字は画面と同じ） */
+.gui-bar { display: inline-flex; align-items: center; gap: 6px; background: var(--brand); color: var(--brand-ink); border-radius: 8px; padding: 5px 8px; }
+.gui-bar .btn { pointer-events: none; }
+.gui-bar strong { white-space: nowrap; }
+.gui-tabs span { padding: 3px 11px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
+.gui-tabs span.is-active { background: #fff; color: var(--brand); }
+.gui-sheettabs { display: inline-flex; gap: 2px; flex-wrap: wrap; }
+.gui-sheettabs span { border: 1px solid var(--line2); border-bottom: 4px solid var(--tab, var(--line2)); background: #f3f4f6; padding: 2px 8px; border-radius: 6px 6px 0 0; font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.gui-sheettabs span.is-active { background: #fff; outline: 2px solid var(--brand); outline-offset: -2px; }
+.gui-sheettabs .t-shu { --tab: #00B0F0; } .gui-sheettabs .t-kita { --tab: #FF0000; } .gui-sheettabs .t-yaki { --tab: #FFC000; }
+.gui-sec { display: inline-block; background: #FF99CC; border: 1px solid #000; padding: 1px 8px; font: 700 15px "MS PGothic", "ＭＳ Ｐゴシック", sans-serif; white-space: nowrap; }
+.gui-file { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line2); border-radius: 6px; background: #fff; padding: 3px 8px; font-size: 13.5px; overflow-wrap: anywhere; }
+.gui-file i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 3px; background: #1d6f42; color: #fff; font: 700 13px sans-serif; flex: none; }
+.gui-paper { display: inline-flex; flex-direction: column; gap: 4px; width: 46px; height: 38px; padding: 6px 7px; border: 1px solid var(--line2); background: #fff; box-shadow: 2px 2px 0 #d1d5db; }
+.gui-paper i { display: block; height: 3px; background: #9ca3af; border-radius: 2px; }
+.gui-paper i:nth-child(2) { background: #FF00FF; width: 70%; } .gui-paper i:nth-child(4) { background: #B7DEE8; }
+.gui-cells { display: inline-flex; }
+.gui-cells span { border: 1px solid #333; margin-left: -1px; padding: 2px 7px; background: #fff; font: 15px "MS PGothic", "ＭＳ Ｐゴシック", sans-serif; white-space: nowrap; }
+.gui-state { border-radius: 999px; padding: 1px 10px; font-size: 13.5px; font-weight: 700; background: #dcfce7; color: var(--ok); border: 1px solid #86efac; white-space: nowrap; }
+.gui-state.is-off { background: #f3f4f6; color: var(--ink2); border-color: var(--line2); }
+.gui-who { display: inline-block; background: var(--brand-soft); border: 1px solid var(--brand); color: var(--brand); border-radius: 999px; padding: 3px 14px; font-weight: 700; }
+
+/* 販売形態と色の見本（一覧の行は styles.css の .lr.f-* の色をそのまま使う。番号表・Excel の色は表の型の「月間特売の字の色」「新商品の塗り」と同じ） */
+.gforms-wrap { overflow-x: auto; }
+.gforms { border-collapse: collapse; font-size: 15px; min-width: 100%; }
+.gforms th { text-align: left; background: #e5e7eb; padding: 6px 10px; font-size: 14px; white-space: nowrap; }
+.gforms td { border-top: 1px solid var(--line); padding: 6px 10px; vertical-align: middle; }
+.gforms td:first-child { white-space: nowrap; }
+.gforms td:first-child .chip + .chip { margin-left: 4px; }
+.gforms .chip { display: inline-block; }
+.gm { display: inline-flex; border: 1px solid var(--line2); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; font-size: 13.5px; }
+.gm > span { background: var(--row, #fff); padding: 3px 8px; white-space: nowrap; }
+.gm .gm-call { border-right: 1px solid var(--line); }
+.gm.f-both .gm-name { background: var(--f-new); }
+.gm-text { vertical-align: middle; }
+.gsheet { display: inline-block; border: 1px solid #000; padding: 1px 8px; margin-right: 8px; font: 15px "MS PGothic", "ＭＳ Ｐゴシック", sans-serif; background: #fff; vertical-align: middle; white-space: nowrap; }
+.gsheet.is-ink { color: #FF00FF; } .gsheet.is-fill { background: #B7DEE8; }
+.gforms .gui-sec { margin-right: 8px; vertical-align: middle; }
+.goff { color: var(--ink2); }
+
 @media (max-width: 760px) {
-  .guide-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 12px 40px; }
-  .guide-toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
-  .guide-toc a { border: 1px solid var(--line2); border-radius: 999px; padding: 3px 10px; font-size: 14px; }
-  .guide-flow li { max-width: none; }
-  .guide-flow li.arrow { display: none; }
+  .guide-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0 12px 40px; }
+  /* 目次は1行の帯にして上に残す（最初の画面を本文に空ける・いまの所がいつも見える） */
+  .guide-toc { position: sticky; top: 0; z-index: 5; flex-direction: row; flex-wrap: nowrap; gap: 4px; overflow-x: auto; background: #fff; padding: 8px 0 6px; margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+  .guide-toc a { flex: none; border: 1px solid var(--line2); border-radius: 999px; padding: 3px 10px; font-size: 14px; white-space: nowrap; }
+  .guide-toc a.is-current { border-color: var(--brand); }
+  .gpair.is-side .gshot { max-width: 100%; }
+  .gshot-scroll { padding: 10px; }
+  .gnum { width: 22px; height: 22px; font-size: 13px; }
+  .gflow-list { flex-direction: column; gap: 24px; padding-left: 10px; }
+  .gflow-step { flex: none; max-width: none; }
+  .gflow:not(.gcards) .gflow-step:not(:last-child)::after { content: '↓'; right: auto; left: 50%; top: auto; bottom: -24px; transform: translateX(-50%); }
+  .gforms th, .gforms td { padding: 5px 6px; }
+  .gforms td:first-child { white-space: normal; }
+  .gm { display: flex; width: max-content; margin: 0 0 3px; }
+  .gsheet, .gforms .gui-sec { display: table; margin: 0 0 3px; }
 }
-@media print { .guide-toc, .topbar { display: none !important; } .guide-layout { display: block; } .guide-scroll { overflow: visible; } body.guide-page { height: auto; overflow: visible; } }
+@media print {
+  .guide-toc, .topbar, .gzoom { display: none !important; }
+  .guide-layout { display: block; } .guide-scroll { overflow: visible; } body.guide-page { height: auto; overflow: visible; }
+  .guide-section { content-visibility: visible; }
+  .guide-section, .gshot, .gflow-step { break-inside: avoid; }
+  .gshot-scroll { background: none; padding: 10px; }
+}
