@@ -187,6 +187,17 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 .detail input, .detail select { height: 34px; border: 1px solid var(--line2); border-radius: 6px; padding: 2px 7px; background: #fff; color: var(--ink); font-weight: 400; font-size: 15px; }
 .detail input:disabled { background: #eef0f3; }
 .detail .wide { grid-column: 1 / -1; }
+/* 1商品の入力の原価: 左＝いまの値（原価・定番価格（包材変更後）・粗利の計算）、右＝包材値上げ前の控え。間に「値上げ前へ写す →」 */
+.cost-block { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+.cost-group { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; background: #fff; }
+.cost-before { margin-left: auto; background: #fafaf3; border-style: dashed; }
+.cost-head { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 3px; }
+.cost-fields { display: flex; gap: 8px 12px; flex-wrap: wrap; }
+.cost-fields > label, .cost-fields > .field { width: 170px; }
+.cost-gross { display: flex; align-items: center; height: 34px; padding: 2px 8px; border-radius: 6px; background: #eef2f7; color: var(--ink); font-weight: 700; font-size: 15px; }
+.cost-gross.is-out { color: var(--red); }
+.cost-mid { display: flex; align-items: center; }
+@media (max-width: 760px) { .cost-before { margin-left: 0; } .cost-fields > label, .cost-fields > .field { width: 140px; } }
 .detail-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .detail-title h3 { margin: 0; font-size: 16px; }
 .name-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 3px; }

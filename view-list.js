@@ -21,8 +21,9 @@
   }
   function keyOf(pid, r) {
     if (view.keys.has(pid)) return view.keys.get(pid);
-    const p = db().products.get(pid); const sec = db().sections.get(String(r['区分ID']));
-    const t = [p['名前'], p['呼出番'], p['小パック'], sec ? sec['表題'] : ''].filter((x) => x !== '' && x !== null && x !== undefined).join(' ');
+    const p = db().products.get(pid);
+    // 名前・番号・小パックだけで当てる（区分の題は入れない＝「≪袋入コロッケ・メンチ・カツ≫」の区分の商品がコロッケでもメンチでも全部当たっていた。PO 2026-11-07。区分で絞るのは区分の選び欄）
+    const t = [p['名前'], p['呼出番'], p['小パック']].filter((x) => x !== '' && x !== null && x !== undefined).join(' ');
     const k = SN ? SN.key(t) : C.nfkc(t).toLowerCase();
     view.keys.set(pid, k);
     return k;
@@ -577,6 +578,51 @@
     return box;
   }
   function field(label, node, cls) { const w = el('label', cls || ''); w.append(document.createTextNode(label), node); return w; }
+  // ------------------------------------------------------------ 1商品の入力の原価（PO 2026-11-07）: 左に「いまの値」（原価・定番価格（包材変更後）・粗利＝計算）、右に「包材値上げ前（控え）」（粗利・定番価格）。
+  //   値上げのときは「値上げ前へ写す」で、いまの粗利と定番価格を控えへ写してから、新しい原価を打つ（コピペしなくてよい）。粗利の控えは割合の数で持ち、% で出して % で受け取る
+  const GB = '粗利（包材値上前）', PB = '定番価格（包材値上前）', PA = '定番価格（包材変更後）';
+  function costBlock(pid, r) {
+    const c0 = () => db().costs.get(pid) || {};
+    const block = el('div', 'cost-block wide');
+    const now = el('div', 'cost-group'); now.append(el('div', 'cost-head', 'いまの値'));
+    const nowRow = el('div', 'cost-fields');
+    const gross = el('output', 'cost-gross'); gross.setAttribute('aria-live', 'polite');
+    const costIn = { v: null }, priceIn = { v: null };
+    const paintGross = () => { const g = C.grossAfter(costIn.v ? costIn.v.value : c0()['原価'], priceIn.v ? priceIn.v.value : c0()[PA]); gross.textContent = g === null ? '—' : C.grossText(g); gross.classList.toggle('is-out', g !== null && (g < C.GROSS_LOW || g > C.GROSS_HIGH)); copy.disabled = g === null; };
+    const saveCost = (k) => (v, i) => { const n = String(v).trim().startsWith('=') ? String(v).trim() : toStored(v); if (showVal(n) === showVal(c0()[k])) { paintGross(); return; } const m = App.change([{ t: '原価', id: pid, f: { [k]: n } }]); if (m) { i.classList.add('is-bad'); toast(m, true); return; } i.classList.remove('is-bad'); paintRow(r); paintGross(); };
+    costIn.v = textInput(c0()['原価'], saveCost('原価')); priceIn.v = textInput(c0()[PA], saveCost(PA));
+    [costIn.v, priceIn.v].forEach((i) => i.addEventListener('input', paintGross)); // 打っている間も粗利をその場で
+    const grossBox = el('div', 'field'); grossBox.append(document.createTextNode('粗利（いま・計算）'), gross);
+    nowRow.append(field('原価', costIn.v), field(PA, priceIn.v), grossBox); now.append(nowRow);
+    // 控え
+    const before = el('div', 'cost-group cost-before'); before.append(el('div', 'cost-head', '包材値上げ前（控え）'));
+    const befRow = el('div', 'cost-fields');
+    const gIn = textInput(C.grossText(c0()[GB]), (v, i) => {
+      const n = C.parseGross(v);
+      if (n === null) { i.classList.add('is-bad'); i.title = '% の数で入れてください（例 30.1）'; return; } // 打っている途中（「30.」など）でお知らせを出さない。赤い枠と説明だけ
+      i.title = '';
+      const cur = c0()[GB];
+      if (n === '' ? C.isBlank(cur) : (!C.isBlank(cur) && Math.abs(n - Number(cur)) < 0.0005)) { i.classList.remove('is-bad'); return; } // 出した桁の中で同じなら直さない（元の細かい数を残す）
+      const m = App.change([{ t: '原価', id: pid, f: { [GB]: n } }]); if (m) { i.classList.add('is-bad'); toast(m, true); return; } i.classList.remove('is-bad'); paintRow(r);
+    }, { placeholder: '例 30.1%', inputMode: 'decimal' });
+    const pIn = textInput(c0()[PB], saveCost(PB));
+    befRow.append(field('粗利', gIn), field('定番価格', pIn)); before.append(befRow);
+    // いまの値 → 控え（1回で2つ。元に戻せる）
+    const copy = el('button', 'btn btn-small cost-copy', '値上げ前へ写す →'); copy.type = 'button'; copy.title = 'いまの粗利と定番価格（包材変更後）を、包材値上げ前の控えへ写します。そのあと新しい原価を打ちます';
+    copy.addEventListener('click', () => {
+      const c = c0(); const g = C.grossAfter(c['原価'], c[PA]); if (g === null) return;
+      const back = { [GB]: C.isBlank(c[GB]) ? '' : c[GB], [PB]: C.isBlank(c[PB]) ? '' : c[PB] };
+      const to = { [GB]: Math.round(g * 1e10) / 1e10, [PB]: toStored(showVal(c[PA])) };
+      const m = App.change([{ t: '原価', id: pid, f: to }]); if (m) { toast(m, true); return; }
+      gIn.value = C.grossText(to[GB]); pIn.value = showVal(to[PB]); paintRow(r);
+      toast('いまの粗利 ' + C.grossText(to[GB]) + '・定番価格 ' + showVal(to[PB]) + ' を、値上げ前の控えへ写しました。続けて新しい原価を打ってください。', false, { label: '元に戻す', run: () => { if (!App.change([{ t: '原価', id: pid, f: back }])) { gIn.value = C.grossText(back[GB]); pIn.value = showVal(back[PB]); paintRow(r); } } });
+      costIn.v.focus(); costIn.v.select();
+    });
+    const mid = el('div', 'cost-mid'); mid.append(copy);
+    block.append(now, mid, before);
+    paintGross();
+    return block;
+  }
   function textInput(value, onCommit, attrs) {
     const i = el('input'); i.value = showVal(value); Object.assign(i, attrs || {});
     let timer = 0;
@@ -682,8 +728,7 @@
     grid.append(field('メモ', textInput(p['メモ'], (v) => { if (String(v) !== showVal(p['メモ'])) save1('メモ', v); }), 'wide'));
     // 隠しの計算
     if (state.showCosts) {
-      const c = db().costs.get(pid) || {};
-      C.COST_KEYS.forEach((k) => grid.append(field(k, textInput(c[k], (v, i) => { const n = String(v).trim().startsWith('=') ? String(v).trim() : toStored(v); if (showVal(n) === showVal(c[k])) return; const m = App.change([{ t: '原価', id: pid, f: { [k]: n } }]); if (m) { i.classList.add('is-bad'); toast(m, true); return; } i.classList.remove('is-bad'); paintRow(r); }))));
+      grid.append(costBlock(pid, r));
     } else {
       grid.append(field('原価', Object.assign(el('input'), { disabled: true, value: '「原価を表示」を押すと入れられます' })));
     }

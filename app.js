@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.2）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.3）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.2';
+  const APP_VERSION = 'souzai-number-api-0.2.3';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');

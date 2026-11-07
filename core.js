@@ -80,6 +80,10 @@
   function showCell(v) { if (v === null || v === undefined) return ''; if (typeof v === 'string' && v.trim()[0] === '=') { const n = evalArith(v); return n === null ? v : String(Math.round(n * 100) / 100); } return String(v); }
   /** 原価の欄に受け付ける形か（空・数・数字の式） */
   function costFormOk(v) { return isBlank(v) || evalArith(v) !== null; }
+  /** 粗利（包材値上前）は割合の数で持つ（Excel の 0.301＝30.1%・包材の値上げ前の控え）。画面は % で出して % で受け取る（PO 2026-11-07「BY が直したいとき直せるように」） */
+  function grossText(v) { if (isBlank(v)) return ''; const n = Number(v); return Number.isFinite(n) ? (Math.round(n * 1000) / 10).toFixed(1) + '%' : String(v); }
+  /** 打った字 → 割合の数（'30.1' も '30.1%' も 0.301）。空なら ''・数でなければ null */
+  function parseGross(s) { const t = nfkc(String(s ?? '')).replace(/[%\s]/g, ''); if (t === '') return ''; if (!/^-?[0-9]+(\.[0-9]+)?$/.test(t)) return null; return Math.round(Number(t) * 1e8) / 1e10; }
   /** 粗利（包材変更後）の割合（計算できなければ null） */
   function grossAfter(cost, price) { const c = evalArith(cost), p = evalArith(price); return c !== null && p ? (p - c) / p : null; }
 
@@ -840,6 +844,7 @@
     const s = String(v);
     if (s.length > (LIMITS[key] || 2000)) return key + 'が長すぎます';
     if (table === '原価' && (key === '原価' || key.indexOf('定番価格') === 0) && !costFormOk(v)) return key + 'は、数か、数字だけの式（=100+20）で入れてください';
+    if (table === '原価' && key === '粗利（包材値上前）' && !isBlank(v) && !(typeof v === 'number' && Number.isFinite(v) && v >= -10 && v <= 1)) return '粗利（包材値上前）は、% の数で入れてください（例 30.1）';
     if (table === '行' && key === '販売形態' && s !== '' && FORMS_ALL.indexOf(s) < 0) return '販売形態は、一覧の中から選んでください';
     if (table === '商品' && key === '地域' && ['共通', '首都圏だけ', '北関東だけ'].indexOf(s) < 0) return '地域は、共通・首都圏だけ・北関東だけのどれかです';
     return '';
@@ -856,5 +861,5 @@
     isCutSection, cutSectionOf, formChanges, nextForm, nextMonthTables, nextMonthOf, MONTHLY_COLS, monthlyWanted, monthlySync, monthlyReconcile, splitSmall,
     MONTHLY_TABLE, MONTHLY_SHEETS, MONTHLY_MARGIN, MIN_NAME_PT, printBox, monthlyPrint, numberPrint,
     PACK_KIND, PACK_PICTURE, PACK_TITLE, PACK_DEFAULT, PACK_MAX_ROWS, PACK_MAX_PRICE, packProblem, packText, parsePack, packOf,
-    isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, parseDeco, editRuns, paintRuns, SALE_FONTS, isSaleFont, dropSaleColor, cleanNameDeco, saleRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
+    isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, grossText, parseGross, parseDeco, editRuns, paintRuns, SALE_FONTS, isSaleFont, dropSaleColor, cleanNameDeco, saleRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
