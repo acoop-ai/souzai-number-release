@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  // 記録のタブ（だれが・いつ・何を。前の値に戻す）と、設定（PO だけ・上限の行数の3段・A4 の見立て・月を消す）。
+  // 記録のタブ（だれが・いつ・何を。前の値に戻す）と、設定（本部と PO: パックの値段／PO だけ: 上限の行数の3段・A4 の見立て・月を消す）。
   const App = window.SouzaiApp;
   const { state, $, el, C, toast } = App;
   const log = { rows: [], q: '', loaded: false };
@@ -68,14 +68,17 @@
     reset() { log.rows = []; log.loaded = false; }
   };
 
-  // ------------------------------------------------------------ 設定（PO だけ）。画面で隠すだけでなく、窓口が PO のアカウントだけ通す
+  // ------------------------------------------------------------ 設定（パックの値段は本部と PO・ほかは PO だけ）。画面で隠すだけでなく、窓口が役割で通す
   // 上限の行数はシートごとに3段から選ぶ（PO 2026-11-06）。首都圏と北関東はいつも一緒に動くので1つ。値は窓口も同じ一覧で確かめる（Code.gs の CAP_CHOICES）
   const CAP_ROWS = [{ label: '首都圏・北関東', note: 'いつも一緒に動きます', table: '首都圏', tables: ['首都圏', '北関東'], choices: [54, 57, 60] }, { label: '焼き物', note: '', table: '焼き物', tables: ['焼き物'], choices: [48, 51, 54] }];
   const estimate = (table, cap) => { try { return App.S && App.S.estimateScale ? App.S.estimateScale(state.db, table, cap) : null; } catch { return null; } };
   const estText = (e) => (e && e.scale ? '印刷 約 ' + Math.round(e.scale * (e.scale <= 1 ? 100 : 1)) + '%' + (e.namePt ? '・商品名 約 ' + Number(e.namePt).toFixed(1) + 'pt' : '') : '');
   function renderSettings() {
     const root = $('#view-settings'); root.replaceChildren();
-    root.append(el('h2', '', '設定（管理者だけ）'));
+    const isPo = state.principal && state.principal.role === 'PO';
+    root.append(el('h2', '', '設定'), packSection());
+    if (!isPo) return; // ここから下は管理者だけ（窓口も PO のアカウントだけ通す）
+    root.append(el('h2', 'set-h-po', '管理者だけの設定'));
     // 1) A3 の番号表の上限の行数
     const s1 = el('section', 'set-sec'); s1.append(el('h3', '', '番号表（A3）の上限の行数'), el('p', 'hint-line', 'シートごとに3つから選びます。印刷は、選んだ行数に合わせて A3 1枚に自動で縮めます。変えたことは記録に残ります。'));
     CAP_ROWS.forEach((row) => {
@@ -109,6 +112,81 @@
     s3.append(del, ask); if (why) s3.append(el('p', 'hint-line', why));
     root.append(s1, s2, s3);
   }
+  // パックの値段（焼き物の表の ≪パック販売用値段特≫。PO 2026-11-07「BY 設定画面で数値を入れる」）。打つと自動で保存・絵はその場で描き直す（Excel と番号表と同じ絵）
+  const pack = { rows: null, month: '', timer: 0, saved: '', pending: null };
+  const digits = (v) => C.nfkc(String(v ?? '')).replace(/[,，円\s]/g, '');
+  function packSection() {
+    const sec = el('section', 'set-sec'); sec.id = 'pack-sec';
+    if (pack.month !== state.month || !pack.rows) { pack.month = state.month; pack.rows = C.packOf(state.db).map((r) => r.map(String)); pack.saved = C.packText(C.packOf(state.db)); }
+    sec.append(el('h3', '', 'パックの値段（焼き物の表の「' + C.PACK_TITLE + '」）'),
+      el('p', 'hint-line', App.monthText(state.month) + 'の値段です。打つと自動で保存し、右の絵（番号表と Excel に入る絵）がその場で変わります。次の月を作ると、この値段を引き継ぎます。'));
+    const wrap = el('div', 'pack-wrap');
+    const left = el('div', 'pack-left');
+    const table = el('table', 'pack-edit'); table.id = 'pack-edit';
+    const hr = el('tr'); ['', '1個', '', '2個', '3個', ''].forEach((h) => hr.append(el('th', '', h))); const head = el('thead'); head.append(hr); table.append(head);
+    const body = el('tbody'); table.append(body);
+    const state1 = el('p', 'pack-state'); state1.id = 'pack-state'; state1.setAttribute('aria-live', 'polite');
+    const add = el('button', 'btn', '＋ 段を足す'); add.type = 'button'; add.id = 'pack-add';
+    const tools = el('div', 'pack-tools'); tools.append(add, state1);
+    const fig = el('figure', 'pack-preview'); const img = el('img'); img.id = 'pack-img'; img.alt = ''; fig.append(img, el('figcaption', '', '番号表と Excel に入る絵'));
+    const paint = () => {
+      body.replaceChildren();
+      pack.rows.forEach((r, i) => {
+        const tr = el('tr'); tr.append(el('th', '', (i + 1) + '段目'));
+        [0, null, 1, 2].forEach((k) => {
+          const td = el('td');
+          if (k === null) { td.textContent = '⇒'; td.className = 'pack-arrow'; tr.append(td); return; }
+          const input = el('input'); input.type = 'text'; input.inputMode = 'numeric'; input.value = r[k]; input.dataset.i = String(i); input.dataset.k = String(k);
+          input.setAttribute('aria-label', (i + 1) + '段目の' + (k + 1) + '個の値段（円）');
+          input.addEventListener('input', () => { pack.rows[i][k] = input.value; changed(false); });
+          input.addEventListener('change', () => changed(true));
+          td.append(input, el('span', 'pack-yen', '円')); tr.append(td);
+        });
+        const tdx = el('td'); const del = el('button', 'btn btn-small', '消す'); del.type = 'button'; del.disabled = pack.rows.length <= 1; del.setAttribute('aria-label', (i + 1) + '段目を消す');
+        del.addEventListener('click', () => { pack.rows.splice(i, 1); paint(); changed(true); }); tdx.append(del); tr.append(tdx);
+        body.append(tr);
+      });
+      add.disabled = pack.rows.length >= C.PACK_MAX_ROWS;
+      add.title = add.disabled ? C.PACK_MAX_ROWS + ' 段までです' : '';
+      check();
+    };
+    // 確かめて、絵を描き直す。よければ保存の予約（now＝欄を離れた・段を消したときは、すぐ）
+    const check = () => {
+      const nums = pack.rows.map((r) => r.map((v) => { const d = digits(v); return /^[0-9]+$/.test(d) ? Number(d) : NaN; }));
+      body.querySelectorAll('input').forEach((x) => { const v = nums[Number(x.dataset.i)][Number(x.dataset.k)]; x.classList.toggle('is-bad', !(Number.isInteger(v) && v >= 1 && v <= C.PACK_MAX_PRICE)); });
+      const why = C.packProblem(nums);
+      const drawn = !why && window.SouzaiPack ? window.SouzaiPack.draw(nums) : null;
+      if (drawn) img.src = drawn.url;
+      return why ? { why } : { nums, text: C.packText(nums) };
+    };
+    const changed = (now) => {
+      const r = check();
+      window.clearTimeout(pack.timer);
+      if (r.why) { state1.className = 'pack-state is-bad'; state1.textContent = r.why + '（入れ終わると保存します）'; return; }
+      if (r.text === pack.saved) { state1.className = 'pack-state is-ok'; state1.textContent = '✓ 保存済み（この値段で Excel を作ります）'; return; }
+      state1.className = 'pack-state'; state1.textContent = '打ち終わると保存します…';
+      pack.pending = { month: pack.month, nums: r.nums, text: r.text, note: state1 };
+      pack.timer = window.setTimeout(flushPack, now ? 0 : 700);
+    };
+    add.addEventListener('click', () => { pack.rows.push(['', '', '']); paint(); const last = body.querySelector('tr:last-child input'); if (last) last.focus(); changed(true); });
+    left.append(table, tools); wrap.append(left, fig); sec.append(wrap);
+    paint(); changed(false);
+    return sec;
+  }
+  function flushPack() { window.clearTimeout(pack.timer); pack.timer = 0; const p = pack.pending; pack.pending = null; if (p) savePack(p.month, p.nums, p.text, p.note); }
+  async function savePack(month, nums, text, note) {
+    const t0 = performance.now();
+    note.className = 'pack-state is-busy'; note.replaceChildren(App.spinner ? App.spinner() : '', document.createTextNode(' 保存しています…'));
+    try {
+      await App.serial(() => App.api('savePack', { month, rows: nums, requestId: App.rid() }));
+      if (month === state.month) { state.db.status[C.PACK_KIND] = text; App.refresh([]); }
+      if (month === pack.month) pack.saved = text; App.perfNote('パックの値段を保存する', t0);
+      if (C.packText(pack.rows.map((r) => r.map((v) => Number(digits(v))))) === text) { note.className = 'pack-state is-ok'; note.textContent = '✓ 保存しました（番号表と Excel の絵が変わりました）'; }
+    } catch (error) {
+      note.className = 'pack-state is-bad'; note.textContent = '保存できませんでした: ' + error.message;
+      if (error.code === 'SESSION') App.showLogin(error.message);
+    }
+  }
   async function saveCap(row, cap, b) {
     if (b.classList.contains('is-on')) return;
     const done = App.busyButton(b, '保存しています…'); const t0 = performance.now();
@@ -130,5 +208,5 @@
       await App.loadMonth(back[back.length - 1]);
     } catch (error) { toast('消せませんでした: ' + error.message, true); done(); }
   }
-  App.views.settings = { show() { renderSettings(); } };
+  App.views.settings = { show() { renderSettings(); }, reset() { flushPack(); pack.rows = null; pack.month = ''; } }; // 月を替える前に、打ちかけの値段を元の月へ保存する
 })();

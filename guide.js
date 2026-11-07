@@ -33,9 +33,8 @@
     'flow-cut': { kind: 'flow', ui: [['chip', 'カット商品'], ['sec', '≪カット商品≫'], ['chip', '定番'], ['chip', '休み']] },
     'flow-excel': { kind: 'flow', ui: [['btn', 'Excel'], ['file', '商品呼出番号表_2026年10月.xlsx'], ['sheets', ''], ['paper', '']] },
     'cards-save': { kind: 'cards', ui: [['save', '✓ 自動保存'], ['saving', '保存中…'], ['saveerr', '⚠ 保存できていません（自動で送り直します）']] },
-    'cards-ask': { kind: 'flow', ui: [['cells', '9003|【見本】ちらし寿司'], ['cells', '定番価格|100 → 120'], ['who', '本部']] },
     'forms': { kind: 'forms', rows: FORM_ROWS },
-    'forms-view': { kind: 'forms', rows: FORM_ROWS.slice(0, 5) }
+    'forms-sheet': { kind: 'forms', rows: FORM_ROWS.slice(0, 5), sheetOnly: true } // 店舗主任向け: 店は一覧を見ないので、番号表・Excel の見え方だけ
   };
   function figOf(name) {
     if (own(FIGS, name)) return FIGS[name];
@@ -88,7 +87,7 @@
   function formsFig(f) {
     const wrap = el('div', 'gforms-wrap');
     const t = el('table', 'gforms');
-    const head = el('tr'); ['販売形態', '一覧（行の色）', '番号表・Excel'].forEach((h) => { const th = el('th', '', h); th.scope = 'col'; head.append(th); });
+    const head = el('tr'); (f.sheetOnly ? ['販売形態', '番号表・Excel の見え方'] : ['販売形態', '一覧（行の色）', '番号表・Excel']).forEach((h) => { const th = el('th', '', h); th.scope = 'col'; head.append(th); });
     const thead = el('thead'); thead.append(head); t.append(thead);
     const body = el('tbody');
     f.rows.forEach(([form, cls, colorName, sheet, sheetText]) => {
@@ -99,7 +98,7 @@
       if (sheet === 'off') c3.append(el('span', 'goff', sheetText));
       else if (sheet === 'cut') { c3.append(el('span', 'gui-sec', '≪カット商品≫'), el('span', 'gm-text', sheetText)); }
       else { const s = el('span', 'gsheet' + sheet.split(' ').filter(Boolean).map((k) => ' is-' + k).join(''), '【見本】商品'); s.setAttribute('aria-hidden', 'true'); c3.append(s, el('span', 'gm-text', sheetText)); }
-      tr.append(c1, c2, c3); body.append(tr);
+      if (f.sheetOnly) tr.append(c1, c3); else tr.append(c1, c2, c3); body.append(tr);
     });
     t.append(body); wrap.append(t);
     return wrap;
@@ -173,6 +172,25 @@
 
   const textList = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x) : []);
   const stepsOf = (a) => (Array.isArray(a) ? a.filter((s) => s && typeof s.h === 'string').map((s) => ({ h: s.h, t: typeof s.t === 'string' ? s.t : '' })) : []);
+  // だれ向けのガイド（BY・本部向け／店舗主任向け。PO 2026-11-07）。本部と PO には両方を1往復で返す（切り替えで窓口を呼ばない）・店には店舗主任向けだけ
+  const FOR_KEYS = ['hq', 'store'];
+  let guides = [];
+  function wantFor() { const v = new URLSearchParams(location.search).get('for'); return FOR_KEYS.indexOf(v) >= 0 ? v : ''; }
+  function paintFor(key) {
+    const bar = document.getElementById('guide-for'); bar.replaceChildren();
+    bar.hidden = guides.length < 2;
+    guides.forEach((g) => {
+      const b = el('button', 'gfor' + (g.key === key ? ' is-on' : ''), g.label); b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(g.key === key));
+      b.addEventListener('click', () => { if (g.key === key) return; show(g.key); try { const u = new URL(location.href); u.searchParams.set('for', g.key); history.replaceState(null, '', u); } catch { /* 印は無くても見られる */ } });
+      bar.append(b);
+    });
+  }
+  function show(key) {
+    const g = guides.find((x) => x.key === key) || guides[0]; if (!g) return;
+    paintFor(g.key);
+    toc.replaceChildren(); document.getElementById('guide-content').replaceChildren(); pinned = ''; scroller.scrollTop = 0;
+    render(g);
+  }
   function render(g) {
     document.title = String(g.title || document.title);
     const sections = Array.isArray(g.sections) ? g.sections.slice() : [];
@@ -202,7 +220,10 @@
       const res = await fetch(GAS_URL, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'getGuide', data: {}, session: s }) });
       const out = await res.json();
       if (!out || out.ok !== true) { askLogin(out && out.message ? out.message : '読めませんでした。'); return; }
-      render(out.data);
+      const d = out.data || {};
+      guides = (Array.isArray(d.guides) ? d.guides : []).filter((g) => g && FOR_KEYS.indexOf(g.key) >= 0 && typeof g.label === 'string');
+      if (!guides.length) { status.textContent = '読めませんでした。開き直してください。'; return; }
+      show(wantFor() || guides[0].key);
     } catch { status.textContent = '読み込めませんでした。通信を確かめて、開き直してください。'; }
   }
   window.addEventListener('DOMContentLoaded', start);

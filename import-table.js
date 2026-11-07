@@ -13,8 +13,9 @@
   const ORDER_FOR_ID = ['首都圏', '焼き物', '北関東'];             // 商品ID を振る順
   // 表の種類（商品を見分ける鍵の1つ目。首都圏と北関東は同じ種類＝同じ商品を1行にまとめる）
   const TABLE_KIND = { '首都圏': '寿司弁当', '北関東': '寿司弁当', '焼き物': '焼き物' };
-  // 見えているシートの中から、名前（NFKC 後）で1枚に決める
-  const SHEET_RULE = { '首都圏': (n) => n.indexOf('(首都圏)') >= 0, '北関東': (n) => n.indexOf('(北関東)') >= 0, '焼き物': (n) => n.indexOf('焼き物') === 0 };
+  // 見えているシートの中から、名前（NFKC 後）で1枚に決める。カッコは見ない（2026-11 の手作りの番号表は「首都圏)寿司・…」と、はじめのカッコが無かった）
+  const bareSheet = (n) => n.replace(/[()[\]【】\s]/g, '');
+  const SHEET_RULE = { '首都圏': (n) => bareSheet(n).indexOf('首都圏') === 0, '北関東': (n) => bareSheet(n).indexOf('北関東') === 0, '焼き物': (n) => bareSheet(n).indexOf('焼き物') === 0 };
   const MONTHLY_SHEET = '月間商品', PROCESSING_SHEET = '加工基本表';
   const SECTION_MARKS = ['≪', '＜', '<', '《'];
   const CONT_MARKS = ['(', '（', '※'];
@@ -34,12 +35,13 @@
   const swapFirst = (a, v) => [v].concat(a.slice(1));
   const sushiForm = (h) => [['≪生寿司≫'].concat(h), ['≪細巻寿司≫'].concat(h), ['≪和菓子≫'].concat(swapFirst(h, '旧トレー')), ['≪弁当(おこわ・ご飯商材)≫'].concat(h), ['≪丼ぶり(肉商材)≫'].concat(h.map((x) => (x === '指定トレー' || x === '変更トレー' ? EMPTY_HEADER : x)))];
   const yakiForm = (h) => [['≪焼き鳥・焼き物≫'].concat(h), ['≪天ぷら・バラ≫'].concat(h), ['≪フライ・唐揚≫'].concat(h), ['≪揚げ物バラ定番品≫'].concat(h.slice(0, -1)), ['≪均一セール≫', '呼出番', '原価', '粗利', '定番価格', '定番価格']];
-  const NAME10 = '2026-10の形（変更トレーの列なし）', NAME89 = '2026-08〜09の形（変更トレーの列あり）';
+  const sushiForm11 = (h) => sushiForm(h).map((row) => (row[0] === '≪和菓子≫' ? row.map((x) => (x === '旧トレー' ? '指定トレー' : x)) : row)); // 2026-11: 和菓子のトレーの見出しも「指定トレー」（値は10月と同じ）
+  const NAME11 = '2026-11の形（和菓子のトレーの見出しも「指定トレー」）', NAME10 = '2026-10の形（変更トレーの列なし）', NAME89 = '2026-08〜09の形（変更トレーの列あり）';
   const MONTHLY_FORM = [['商品名', '呼出番', '規格', '本体価格', '税込価格', '規格', '小パック', EMPTY_HEADER, EMPTY_HEADER], [EMPTY_HEADER, EMPTY_HEADER, EMPTY_HEADER, EMPTY_HEADER, EMPTY_HEADER, EMPTY_HEADER, '本体価格', '税込価格', EMPTY_HEADER]];
   const LAYOUTS = {
     '番号表': {
-      '首都圏': [{ '名前': NAME10, '指紋': sushiForm(H10) }, { '名前': NAME89, '指紋': sushiForm(H89) }],
-      '北関東': [{ '名前': NAME10, '指紋': sushiForm(H10) }, { '名前': NAME89, '指紋': sushiForm(H89) }],
+      '首都圏': [{ '名前': NAME11, '指紋': sushiForm11(H10) }, { '名前': NAME10, '指紋': sushiForm(H10) }, { '名前': NAME89, '指紋': sushiForm(H89) }],
+      '北関東': [{ '名前': NAME11, '指紋': sushiForm11(H10) }, { '名前': NAME10, '指紋': sushiForm(H10) }, { '名前': NAME89, '指紋': sushiForm(H89) }],
       '焼き物': [{ '名前': NAME10, '指紋': yakiForm(H10) }, { '名前': NAME89, '指紋': yakiForm(H89) }]
     },
     '月間商品': { '月間特売': [{ '名前': '2026-08〜10の形', '指紋': MONTHLY_FORM }], '新規商品': [{ '名前': '2026-08〜10の形', '指紋': MONTHLY_FORM }] }
@@ -267,8 +269,11 @@
 
   // ================================================================ 見出しの並び（指紋）を確かめる
   /** 確かめた形のどれかと同じなら、その形の名前。違えば、違う見出しごとに場所を付けて止める */
-  function checkLayout(kind, key, fp, label, cellOf, partLabel) {
-    const forms = (LAYOUTS[kind] || {})[key] || [];
+  function checkLayout(kind, key, fp0, label, cellOf, partLabel) {
+    // 右の端の空の見出しは比べない（印刷範囲が空の列を1つ多く含むかどうかは、読み方に関係しない。2026-11 の月間商品は印刷範囲が A〜H、8〜10月は A〜I だった）
+    const trim = (rows) => rows.map((row) => { if (!Array.isArray(row)) return row; const r = row.slice(); while (r.length && r[r.length - 1] === EMPTY_HEADER) r.pop(); return r; });
+    const fp = trim(fp0);
+    const forms = ((LAYOUTS[kind] || {})[key] || []).map((f) => Object.assign({}, f, { '指紋': trim(f['指紋']) }));
     for (const form of forms) if (sameJson(form['指紋'], fp)) return form['名前'];
     const tail = '。元の書類の見出しを確かめてください（正しい形なら、形を登録してから読み直します）';
     if (!forms.length) throw stop(label + 'の見出しの並びの、確かめた形がありません' + tail, '');
@@ -357,13 +362,33 @@
     });
   }
 
-  function readNumberTable(book, key) {
+  function readNumberTable(book, key, notes) {
     const label = '番号表（' + key + '）';
-    const hits = book.sheets.filter((s) => s.state === 'visible' && SHEET_RULE[key](nk(s.name)));
-    if (hits.length !== 1) {
-      throw stop(label + 'のシートが ' + hits.length + ' 枚見つかりました（1枚の前提）。見えているシート: ' + book.sheets.filter((s) => s.state === 'visible').map((s) => s.name).join('、'), 'ブック');
+    return pickAndRead(book, label, SHEET_RULE[key], (sh) => readNumberSheet(sh, key, label), notes);
+  }
+  // ================================================================ 同じ表のシートが2枚以上あるとき、どれを読むか（PO 2026-11-07「同じシートが複数あることがある・ふだんは非表示にして配っている」）
+  //   ① 非表示（とても非表示も）のシートは読まない ② 見えているのが1枚ならそれ ③ 2枚以上なら、左のタブから順に読み、確かめた見出しの形で読めた最初の1枚
+  //   ③ のときは、どれを読んで、どれを読まなかったかを「確かめる」に出す（取り込む前の一覧で見られる）。見えているのが0枚なら止める（非表示の同じ表があれば名前も出す）
+  //   Python の道具（tools/souzai_read.py）は決まった元の書類しか読まないので、見えている1枚の前提のまま
+  function pickAndRead(book, label, test, read, notes) {
+    const all = book.sheets.filter((s) => test(nk(s.name)));
+    const shown = all.filter((s) => s.state === 'visible');
+    const hidden = all.filter((s) => s.state !== 'visible');
+    const visibleNames = () => book.sheets.filter((s) => s.state === 'visible').map((s) => s.name).join('、');
+    if (!shown.length) throw stop(label + 'のシートが、見えているシートにありません' + (hidden.length ? '（非表示のシート「' + hidden.map((s) => s.name).join('」「') + '」はあります。使うときは、Excel でそのシートを再表示してから入れてください）' : '') + '。見えているシート: ' + visibleNames(), 'ブック');
+    if (shown.length === 1) return read(shown[0]);
+    let first = null;
+    for (const sh of shown) {
+      try {
+        const out = read(sh);
+        if (notes) notes.push({ level: LEVEL_CHECK, what: label + 'のシートが ' + shown.length + ' 枚見えていたので、左のタブから読めた「' + sh.name + '」を読みました（読まなかった物: ' + shown.filter((x) => x !== sh).map((x) => '「' + x.name + '」').join('・') + '）。違う時は、使わないシートを非表示にしてから入れ直してください', where: 'ブック' });
+        return out;
+      } catch (e) { if (!(e instanceof StopRead)) throw e; if (!first) first = e; }
     }
-    const ws = sheetView(hits[0]);
+    throw first;
+  }
+  function readNumberSheet(sh, key, label) {
+    const ws = sheetView(sh);
     if (!ws.printArea) throw stop('印刷範囲がありません。印刷範囲の中を「今月並べる商品」として読むため、止めました', sheetWhere(ws));
     const [r1, c1, r2, c2] = ws.printArea;
     const hr = findHeaderRow(ws);
@@ -391,9 +416,10 @@
   }
 
   // ================================================================ 月間商品を読む（souzai_read.read_monthly と同じ）
-  function readMonthly(book) {
-    const sh = book.sheets.find((s) => s.name === MONTHLY_SHEET);
-    if (!sh) throw stop('「' + MONTHLY_SHEET + '」のシートがありません', 'ブック');
+  function readMonthly(book, notes) {
+    return pickAndRead(book, '「' + MONTHLY_SHEET + '」', (n) => bareSheet(n).indexOf(MONTHLY_SHEET) === 0, readMonthlySheet, notes);
+  }
+  function readMonthlySheet(sh) {
     const ws = sheetView(sh);
     if (!ws.printArea) throw stop('印刷範囲がありません', sheetWhere(ws));
     const [r1, c1, r2, c2] = ws.printArea;
@@ -448,7 +474,7 @@
     const found = [];                           // { m, y, where }
     monthly.parts.forEach((p) => { const m = /^[ ]*([0-9]{1,2})月/.exec(nk(p.title)); if (m) found.push({ m: Number(m[1]), y: null, where: 'シート「' + MONTHLY_SHEET + '」の題（' + p.title_row + '行目）' }); });
     book.sheets.forEach((s) => { if (s.state !== 'visible') return; const m = /([0-9]{1,2})月$/.exec(nk(s.name)); if (m) found.push({ m: Number(m[1]), y: null, where: 'シート「' + s.name + '」の名前' }); });
-    const proc = book.sheets.find((s) => s.name === PROCESSING_SHEET);
+    const proc = book.sheets.find((s) => s.state === 'visible' && bareSheet(nk(s.name)) === PROCESSING_SHEET) || book.sheets.find((s) => s.name === PROCESSING_SHEET); // 見えている物を先に
     if (proc) {
       const ws = sheetView(proc);
       let hr = null;
@@ -1011,9 +1037,9 @@
       if (!book || !Array.isArray(book.sheets)) throw stop('ブックの形が違います（sheets がありません）', '');
       // 見出しの並びは4枚とも確かめてから止める（違う所をまとめて返す）
       const tables = {}, layoutErrors = [];
-      TABLE_KEYS.forEach((k) => { try { tables[k] = readNumberTable(book, k); } catch (e) { if (e instanceof StopRead) layoutErrors.push.apply(layoutErrors, e.items); else throw e; } });
+      TABLE_KEYS.forEach((k) => { try { tables[k] = readNumberTable(book, k, problems); } catch (e) { if (e instanceof StopRead) layoutErrors.push.apply(layoutErrors, e.items); else throw e; } });
       let monthly = null;
-      try { monthly = readMonthly(book); } catch (e) { if (e instanceof StopRead) layoutErrors.push.apply(layoutErrors, e.items); else throw e; }
+      try { monthly = readMonthly(book, problems); } catch (e) { if (e instanceof StopRead) layoutErrors.push.apply(layoutErrors, e.items); else throw e; }
       if (layoutErrors.length) throw new StopRead(layoutErrors);
       const mo = monthOf(book, monthly, opts.month);
       month = mo.month;

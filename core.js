@@ -803,8 +803,36 @@
     return { price, cost };
   }
 
+  // ---------------------------------------------------------------- パックの値段（焼き物の表の「≪パック販売用値段特≫」。元の書類では絵。PO 2026-11-07「BY 設定画面で数値を入れる」）
+  //   月の状態の表に、表の種類＝PACK_KIND・形＝「109,199,280/119,219,319/…」（1段＝1個・2個・3個の値段）で持つ。行が無い月は PACK_DEFAULT（元の絵の値段）。
+  //   次の月を作るときは前の月の値段を写す（窓口）。Excel と番号表の画面は、この数から絵を描く（pack-picture.js）
+  const PACK_KIND = 'パックの値段';
+  const PACK_PICTURE = '絵/焼き物_1.png';
+  const PACK_TITLE = '≪パック販売用値段特≫';
+  const PACK_DEFAULT = [[109, 199, 280], [119, 219, 319], [159, 279, 409], [179, 330, 480], [209, 399, 580]];
+  const PACK_MAX_ROWS = 6;
+  const PACK_MAX_PRICE = 99999;
+  /** 値段の段が入れられる形か。問題なければ ''、あれば人が読む文 */
+  function packProblem(rows) {
+    if (!Array.isArray(rows) || !rows.length) return '値段を1段以上入れてください';
+    if (rows.length > PACK_MAX_ROWS) return '値段は ' + PACK_MAX_ROWS + ' 段までです';
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!Array.isArray(r) || r.length !== 3 || r.some((v) => typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > PACK_MAX_PRICE)) return (i + 1) + '段目の値段は、1〜' + PACK_MAX_PRICE + ' の数で入れてください';
+    }
+    return '';
+  }
+  function packText(rows) { return rows.map((r) => r.join(',')).join('/'); }
+  function parsePack(text) {
+    const s = String(text ?? '').trim(); if (!s) return null;
+    const rows = s.split('/').map((line) => line.split(',').map((v) => (String(v).trim() === '' ? NaN : Number(v))));
+    return packProblem(rows) ? null : rows;
+  }
+  /** その月の値段（db は makeDb の物。行が無い・読めない月は元の絵の値段） */
+  function packOf(db) { return parsePack(db && db.status ? db.status[PACK_KIND] : '') || PACK_DEFAULT.map((r) => r.slice()); }
+
   // ---------------------------------------------------------------- 値の形（画面と窓口で同じ決まり）
-  const LIMITS = { '呼出番': 20, '名前': 200, '指定トレー': 100, '小パック': 100, 'メモ': 500, '定番価格': 30, '特売価格': 30 };
+  const LIMITS ={ '呼出番': 20, '名前': 200, '指定トレー': 100, '小パック': 100, 'メモ': 500, '定番価格': 30, '特売価格': 30 };
   /** 欄の形を確かめる。問題なければ ''、あれば人が読む文 */
   function fieldProblem(table, key, value) {
     const v = value === null || value === undefined ? '' : value;
@@ -827,5 +855,6 @@
   root.SouzaiCore = { TABLES, TABLE_KEYS, KIND_TABLES, KINDS, KIND_PRODUCT, KIND_BLANK, KIND_CONT, KIND_SECTION, FORMS, FORMS_ALL, FORM_REGULAR, FORM_SALE, FORM_NEW, FORM_SALE_NEW, FORM_CUT, FORM_REST, FORM_END, FORM_PLAN, ADDED_MARK, isAddedProduct, normTray, showCell, shownPriceKey, shownPrice, isOffForm, formHas, toggleForm, productForms, freeCalls, isSaleForm, isNewForm, isCutForm, formOf, rowOn, rowRegion, COST_KEYS, GROSS_LOW, GROSS_HIGH, LEVEL_FIX, LEVEL_CHECK, EDITABLE,
     isCutSection, cutSectionOf, formChanges, nextForm, nextMonthTables, nextMonthOf, MONTHLY_COLS, monthlyWanted, monthlySync, monthlyReconcile, splitSmall,
     MONTHLY_TABLE, MONTHLY_SHEETS, MONTHLY_MARGIN, MIN_NAME_PT, printBox, monthlyPrint, numberPrint,
+    PACK_KIND, PACK_PICTURE, PACK_TITLE, PACK_DEFAULT, PACK_MAX_ROWS, PACK_MAX_PRICE, packProblem, packText, parsePack, packOf,
     isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, parseDeco, editRuns, paintRuns, SALE_FONTS, isSaleFont, dropSaleColor, cleanNameDeco, saleRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

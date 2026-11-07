@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.1）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.2）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.1';
+  const APP_VERSION = 'souzai-number-api-0.2.2';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -313,7 +313,7 @@
     if (SN && data.words && !state.words) { state.words = data.words; try { SN.load(data.words); } catch {} }
     recompute();
     $('#login-panel').hidden = true; showNotice('');
-    $('#month-nav').hidden = false; $('#view-tabs').hidden = false; $('#tb-right').hidden = false;
+    $('#month-nav').hidden = false; $('#view-tabs').hidden = isView; $('#tb-right').hidden = false; // 店は番号表だけ（PO 2026-11-07「店はマスターを見ない・一覧はなし」）＝切り替えのタブを出さない
     $('#month-label').textContent = monthText(state.month);
     document.title = '商品呼出番号表 ' + monthText(state.month);
     const i = state.months.indexOf(state.month);
@@ -325,9 +325,9 @@
     document.querySelector('[data-view="log"]').hidden = isView;
     $('#account-label').textContent = state.principal.email.split('@')[0];
     $('#account-role').textContent = state.principal.email + '（' + state.principal.roleLabel + '）';
-    document.querySelector('[data-view="settings"]').hidden = state.principal.role !== 'PO';
+    document.querySelector('[data-view="settings"]').hidden = isView; // 設定は本部と PO（パックの値段は本部も・上限の行数と月を消すは PO だけ。守りは窓口）
     $('#app-version').textContent = '版 ' + APP_VERSION;
-    if ((state.view === 'settings' && state.principal.role !== 'PO') || (isView && state.view === 'log')) state.view = 'list';
+    if (isView && state.view !== 'sheet') state.view = 'sheet';
     Object.values(views).forEach((v) => v.reset && v.reset());
     setView(state.view, true);
     if (wanted && !data.costs) fetchCostsThenShow(); // この端末で先に入った人がたたんでいて、頼まなかったとき
@@ -373,7 +373,7 @@
 
   // ------------------------------------------------------------ 画面の切り替え
   function setView(name, force) {
-    if (state.readOnly && (name === 'log' || name === 'settings')) name = 'list';
+    if (state.readOnly && name !== 'sheet') name = 'sheet'; // 店は番号表だけ
     if (state.view === name && !force) return;
     state.view = name;
     try { store()?.setItem(VIEW_KEY, name); } catch {}
@@ -565,13 +565,13 @@
   async function start() {
     const redirect = L ? L.consumeRedirect(window.__oauthRedirectHash, store() || { getItem: () => null, setItem() {}, removeItem() {} }, Date.now()) : null;
     window.__oauthRedirectHash = null;
-    try { const v = store()?.getItem(VIEW_KEY); if (['list', 'sheet', 'log'].includes(v)) state.view = v; } catch {}
+    try { const v = store()?.getItem(VIEW_KEY); if (['list', 'sheet', 'log', 'settings'].includes(v)) state.view = v; } catch {}
     renderDevAccounts();
     if (redirect && redirect.accessToken) { await finishLogin(redirect.accessToken); return; }
     state.session = readSession();
     if (state.session) {
       const t0 = performance.now();
-      $('#login-panel').hidden = true; views.list && views.list.skeleton();
+      $('#login-panel').hidden = true; if (state.view === 'list' && views.list) views.list.skeleton();
       showProgress('前回のログインで開いています…');
       try { applyWorkspace(await fetchOpen()); perfNote('開く', t0); }
       catch (error) { clearSession(); showLogin(error.message); }

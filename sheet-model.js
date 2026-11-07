@@ -50,7 +50,13 @@
     const type = sheet._db.type;
     rows.forEach((f) => {
       const kind = f['種類'];
-      if (kind === '絵') { const data = type.pictures[f['値']]; sheet.pictures.push({ name: String(f['値']), data: data || '', anchor: parseAnchor(f['セル']) }); return; }
+      if (kind === '絵') { // パックの値段の絵は、その月の数から描く（pack-picture.js）。描けない所では元の絵
+        const name = String(f['値']);
+        const pack = name === C.PACK_PICTURE ? C.packOf(sheet._db) : null;
+        const drawn = pack && root.SouzaiPack ? root.SouzaiPack.draw(pack) : null;
+        sheet.pictures.push({ name, data: (drawn && drawn.png) || type.pictures[f['値']] || '', anchor: parseAnchor(f['セル']), pack, url: drawn ? drawn.url : '' });
+        return;
+      }
       if (kind === '行の高さ') { if (!isBlank(f['値'])) sheet.rowHeights[Number(f['セル']) + shift] = Number(f['値']); return; }
       if (kind === 'セル') {
         const ref = parseRef(f['セル']);

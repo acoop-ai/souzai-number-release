@@ -81,14 +81,14 @@
     const root = $('#view-sheet'); root.replaceChildren();
     const bar = el('div', 'sheet-bar');
     const tabs = el('div', 'sheet-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'シート');
-    TABS.forEach((t) => { const b = el('button', t === view.table ? 'is-active' : '', t); b.type = 'button'; b.dataset.tab = t; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(t === view.table)); b.addEventListener('click', () => openTable(t)); tabs.append(b); });
+    TABS.forEach((t) => { const b = el('button', t === view.table ? 'is-active' : ''); b.append(el('span', '', t), el('span', 'tab-hits')); b.type = 'button'; b.dataset.tab = t; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(t === view.table)); b.addEventListener('click', () => openTable(t)); tabs.append(b); });
     const zoom = el('div', 'zoom-group'); zoom.setAttribute('role', 'group'); zoom.setAttribute('aria-label', '大きさ');
     [['fit', '全体'], ['full', '大きく']].forEach(([k, label]) => { const b = el('button', view.zoom === k ? 'is-active' : '', label); b.type = 'button'; b.dataset.zoom = k; b.addEventListener('click', () => { view.zoom = k; zoom.querySelectorAll('button').forEach((x) => x.classList.toggle('is-active', x === b)); applyZoom(); }); zoom.append(b); });
     const mode = el('span', 'mode-label'); mode.id = 'mode-label';
     const move = el('button', 'btn', '名前や番号で移す'); move.type = 'button'; move.id = 'move-open'; move.addEventListener('click', () => { view.movePanel = !view.movePanel; renderMovePanel(); });
     const undo = el('button', 'btn', '元に戻す'); undo.type = 'button'; undo.id = 'move-undo'; undo.addEventListener('click', () => { App.undoLast(); paintBar(); });
     const auto = el('button', 'btn', '自動に戻す'); auto.type = 'button'; auto.id = 'move-auto'; auto.addEventListener('click', () => askAuto(auto));
-    if (state.readOnly) bar.append(tabs, zoom); else bar.append(tabs, zoom, mode, move, undo, auto);
+    if (state.readOnly) bar.append(tabs, zoom, findBox()); else bar.append(tabs, zoom, findBox(), mode, move, undo, auto);
     const usage = el('div', 'usage'); usage.id = 'usage'; usage.setAttribute('aria-label', '列ごとの使い方');
     const note = el('p', 'sheet-note', '区分の見出しを掴むとかたまりごと、商品の行を掴むとその1行だけ動きます。Esc で取り消せます。首都圏と北関東はいつも一緒に動きます。');
     const panel = el('div', 'move-panel'); panel.id = 'move-panel'; panel.hidden = true;
@@ -223,12 +223,99 @@
       const sig = sigOf(e.cell, e.text) + '|' + spill;
       if (sig !== box.sig) { paintCell(box, e.cell, styles, box.w, e.text, spill); box.sig = sig; updated++; }
     });
+    placePictures(sheet, cols, rowsList, defaultH);
+    view.texts = texts; find.cache.clear(); if (find.q) runFind(false);
     markGrab(grabbable);
     applyZoom();
     paintBar(); paintUsage();
     view.dirty = false;
     App.perfNote('見本を描く（' + view.table + '・' + updated + 'セル）', t0);
   }
+  // パックの値段の絵（焼き物）を、Excel と同じ置き場に重ねる。絵は pack-picture.js が描いた物（Excel に入る絵と同じ）。
+  //   置き場は Excel の形（左上のセル＋ずれ・右下のセル＋ずれ。ずれは EMU）。隠した列・行は幅 0 として数える
+  const EMU_PX = 9525;
+  function placePictures(sheet, cols, rowsList, defaultH) {
+    document.querySelectorAll('#sheet-scroll .sheet-pic').forEach((n) => n.remove());
+    document.querySelectorAll('#sheet-scroll td.has-pic').forEach((n) => n.classList.remove('has-pic'));
+    const colW = new Map(cols.map((c) => [c.c, c.w]));
+    const rowH = (r) => (sheet.rowHeights[r] !== undefined ? sheet.rowHeights[r] * 1.333 : defaultH);
+    const shown = new Set(rowsList);
+    (sheet.pictures || []).forEach((p) => {
+      if (!p.url) return;
+      const a = p.anchor; const c0 = a.from.col + 1, r0 = a.from.row + 1;
+      const box = view.cells.get(r0 * 2000 + c0); if (!box) return;
+      const xOf = (m) => { let x = 0; cols.forEach((c) => { if (c.c >= c0 && c.c < m.col + 1) x += c.w; }); const w = colW.get(m.col + 1); return x + (w ? Math.min(m.colOff / EMU_PX, w) : 0); };
+      const yOf = (m) => { let y = 0; rowsList.forEach((r) => { if (r >= r0 && r < m.row + 1) y += rowH(r); }); return y + (shown.has(m.row + 1) ? Math.min(m.rowOff / EMU_PX, rowH(m.row + 1)) : 0); };
+      const x1 = xOf(a.from), y1 = yOf(a.from), x2 = xOf(a.to), y2 = yOf(a.to);
+      if (x2 - x1 < 4 || y2 - y1 < 4) return;
+      const img = el('img', 'sheet-pic'); img.src = p.url; img.draggable = false;
+      img.alt = p.pack ? C.PACK_TITLE + ' ' + p.pack.map((r) => '1個 ' + r[0] + '円・2個 ' + r[1] + '円・3個 ' + r[2] + '円').join('／') : '';
+      Object.assign(img.style, { left: x1.toFixed(1) + 'px', top: y1.toFixed(1) + 'px', width: (x2 - x1).toFixed(1) + 'px', height: (y2 - y1).toFixed(1) + 'px' });
+      box.td.classList.add('has-pic'); box.td.append(img);
+    });
+  }
+  // ------------------------------------------------------------ 番号表で探す（名前・番号。ひらがな・カタカナ・ローマ字でも＝一覧と同じ部品 SN）
+  //   当たったセルを光らせ、Enter で次へ（Shift+Enter で前へ）。ほかの表の当たりの数はタブに出す。店は一覧が無いので、ここが探す所
+  const find = { q: '', terms: null, hits: [], at: -1, cache: new Map(), timer: 0 };
+  const findKey = (t) => (SN ? SN.key(t) : C.nfkc(t).toLowerCase());
+  const findHit = (k) => (SN ? SN.hit(k, find.terms) : find.terms.every((x) => k.includes(x)));
+  function findBox() {
+    const box = el('div', 'sheet-find'); box.setAttribute('role', 'search');
+    const input = el('input'); input.type = 'search'; input.id = 'sheet-search'; input.placeholder = '名前・番号で探す'; input.value = find.q; input.setAttribute('aria-label', '番号表で探す（ひらがな・ローマ字・番号の一部でも）');
+    const count = el('span', 'find-count'); count.id = 'find-count'; count.setAttribute('aria-live', 'polite');
+    const prev = el('button', 'btn btn-small', '前へ'); prev.type = 'button'; prev.id = 'find-prev';
+    const next = el('button', 'btn btn-small', '次へ'); next.type = 'button'; next.id = 'find-next';
+    input.addEventListener('input', () => { window.clearTimeout(find.timer); find.timer = window.setTimeout(() => { find.q = input.value; find.at = 0; runFind(true); }, 120); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (find.q !== input.value) { find.q = input.value; find.at = 0; runFind(true); } else step(e.shiftKey ? -1 : 1); }
+      else if (e.key === 'Escape' && input.value) { e.preventDefault(); input.value = ''; find.q = ''; runFind(false); }
+    });
+    prev.addEventListener('click', () => step(-1)); next.addEventListener('click', () => step(1));
+    box.append(input, count, prev, next);
+    return box;
+  }
+  /** ほかの表の、見えるセルの字（データが変わるまで覚える） */
+  function keysOf(t) {
+    if (find.cache.has(t)) return find.cache.get(t);
+    const sheet = S.buildOne(db(), t, C.rowsBySection(db()));
+    const hidden = new Set(sheet.cols.filter((c) => c.hidden).map((c) => c.c)); const hiddenRows = new Set(sheet.hiddenRows || []);
+    const out = [];
+    sheet.grid.cells.forEach((cell, key) => { const v = cell && cell.v; if (v === null || v === undefined || v === '' || hidden.has(key % 2000) || hiddenRows.has(Math.floor(key / 2000))) return; out.push(findKey(String(v))); });
+    find.cache.set(t, out); return out;
+  }
+  function runFind(jump) {
+    const t0 = performance.now();
+    find.terms = find.q.trim() ? (SN ? SN.terms(find.q) : C.nfkc(find.q).toLowerCase().split(/\s+/).filter(Boolean)) : null;
+    if (find.terms && !find.terms.length) find.terms = null;
+    document.querySelectorAll('#sheet-scroll td.is-hit').forEach((td) => td.classList.remove('is-hit', 'is-hit-now'));
+    find.hits = [];
+    if (find.terms && view.texts) {
+      view.texts.forEach((e, key) => { if (e.text !== '' && findHit(findKey(e.text))) find.hits.push(key); });
+      find.hits.sort((a, b) => a - b); // 上の行から・同じ行は左から
+      find.hits.forEach((key) => { const b = view.cells.get(key); if (b) b.td.classList.add('is-hit'); });
+    }
+    if (find.at >= find.hits.length) find.at = find.hits.length - 1;
+    if (find.hits.length && find.at < 0) find.at = 0;
+    showHit(jump);
+    document.querySelectorAll('.sheet-tabs button').forEach((b) => {
+      const n = !find.terms ? 0 : (b.dataset.tab === view.table ? find.hits.length : keysOf(b.dataset.tab).filter((k) => findHit(k)).length);
+      const tag = b.querySelector('.tab-hits'); if (tag) tag.textContent = n ? String(n) : '';
+      b.classList.toggle('has-hits', n > 0);
+    });
+    if (find.terms) App.perfNote('番号表で探す', t0);
+  }
+  function showHit(jump) {
+    const count = $('#find-count');
+    document.querySelectorAll('#sheet-scroll td.is-hit-now').forEach((td) => td.classList.remove('is-hit-now'));
+    const n = find.hits.length;
+    if (count) count.textContent = !find.terms ? '' : (n ? (find.at + 1) + ' / ' + n + ' 件' : (document.querySelector('.sheet-tabs button.has-hits') ? 'この表には無し（数の出ている表へ）' : '当たりなし'));
+    ['#find-prev', '#find-next'].forEach((sel) => { const b = $(sel); if (b) b.disabled = n < 2; });
+    if (!n) return;
+    const box = view.cells.get(find.hits[find.at]); if (!box) return;
+    box.td.classList.add('is-hit-now');
+    if (jump) box.td.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+  }
+  function step(d) { if (!find.hits.length) return; find.at = (find.at + d + find.hits.length) % find.hits.length; showHit(true); }
   function metaOf(r, c) {
     const sheet = view.sheet; if (!sheet || !sheet.meta || !sheet.meta.blocks) return null;
     const b = sheet.meta.blocks.find((x) => c >= x.first && c <= x.last); if (!b) return null;
@@ -251,7 +338,7 @@
   function openTable(t) {
     view.table = t;
     document.querySelectorAll('.sheet-tabs button').forEach((b) => { const on = b.dataset.tab === t; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', String(on)); });
-    if (view.built && state.view === 'sheet') { render(); $('#sheet-scroll').scrollTop = 0; renderMovePanel(); }
+    if (view.built && state.view === 'sheet') { find.at = 0; render(); $('#sheet-scroll').scrollTop = 0; renderMovePanel(); if (find.q) showHit(true); }
     else view.dirty = true;
   }
 

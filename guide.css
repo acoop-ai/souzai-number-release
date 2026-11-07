@@ -1,5 +1,11 @@
 /* ご利用ガイド（全システム共通の型: 左に目次・右に本文・連動）。節ごとに、まず図（写真に番号の丸／流れの箱／色の見本）。文は図の補い */
 .guide-scroll { flex: 1; min-height: 0; overflow: auto; background: #fff; }
+/* だれ向けのガイドの切り替え（本部と PO だけに出る）。上の帯の中に、文字の幅のタブで（いま見ている物は白い面） */
+.guide-for { display: inline-flex; gap: 2px; margin-left: 6px; padding: 2px; border-radius: 9px; background: rgba(255, 255, 255, .14); }
+.guide-for .gfor { background: none; border: 0; color: inherit; padding: 5px 13px; border-radius: 7px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.guide-for .gfor:hover { background: rgba(255, 255, 255, .18); }
+.guide-for .gfor.is-on { background: #fff; color: var(--brand); }
+@media print { .guide-for { display: none; } }
 .guide-status { padding: 16px; margin: 0; }
 .guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 14px 16px 60px; }
 .guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
