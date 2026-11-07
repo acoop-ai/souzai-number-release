@@ -31,6 +31,12 @@ button:disabled { cursor: default; }
 .alert-chip { background: var(--alert); color: #5c4a00; border: 1px solid #e0cf73; border-radius: 999px; padding: 3px 12px; font-weight: 700; white-space: nowrap; }
 .alert-chip.is-zero { background: #dcfce7; color: var(--ok); border-color: #86efac; }
 .save-state { white-space: nowrap; font-size: 14px; min-width: 6.8em; }
+/* 元に戻す・やり直す（どの直しも・何回でも。PO 2026-11-07）。保存の印のすぐ右に、文字の幅で */
+.undo-group { display: inline-flex; gap: 4px; }
+.undo-group .btn-icon { min-width: 34px; justify-content: center; padding: 2px 8px; font-size: 17px; font-weight: 700; line-height: 1; } /* 帯を1行に収める（1366 の幅で）。名前と次に戻す中身はマウスを置くと出る・ガイドの地図にも */
+.undo-group .btn:disabled { opacity: .55; cursor: default; }
+tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
+@keyframes undo-flash { 0% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, .55); } 100% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, 0); } }
 .save-state.is-error { background: #fee2e2; color: var(--red); border-radius: 6px; padding: 1px 8px; font-weight: 700; }
 .btn { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: var(--ink); border: 1px solid var(--line2); border-radius: 7px; padding: 4px 11px; text-decoration: none; white-space: nowrap; min-height: 32px; }
 .btn:hover:not(:disabled) { background: #eef2f7; }
@@ -190,14 +196,14 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 /* 1商品の入力の原価: 左＝いまの値（原価・定番価格（包材変更後）・粗利の計算）、右＝包材値上げ前の控え。間に「値上げ前へ写す →」 */
 .cost-block { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
 .cost-group { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; background: #fff; }
-.cost-before { margin-left: auto; background: #fafaf3; border-style: dashed; }
+.cost-before { background: #fafaf3; border-style: dashed; } /* 右の端へ押しやらず、左から詰めて並べる（PO 2026-11-07） */
 .cost-head { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 3px; }
 .cost-fields { display: flex; gap: 8px 12px; flex-wrap: wrap; }
 .cost-fields > label, .cost-fields > .field { width: 170px; }
 .cost-gross { display: flex; align-items: center; height: 34px; padding: 2px 8px; border-radius: 6px; background: #eef2f7; color: var(--ink); font-weight: 700; font-size: 15px; }
 .cost-gross.is-out { color: var(--red); }
 .cost-mid { display: flex; align-items: center; }
-@media (max-width: 760px) { .cost-before { margin-left: 0; } .cost-fields > label, .cost-fields > .field { width: 140px; } }
+@media (max-width: 760px) { .cost-fields > label, .cost-fields > .field { width: 140px; } }
 .detail-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .detail-title h3 { margin: 0; font-size: 16px; }
 .name-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 3px; }

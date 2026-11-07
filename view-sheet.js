@@ -86,9 +86,8 @@
     [['fit', '全体'], ['full', '大きく']].forEach(([k, label]) => { const b = el('button', view.zoom === k ? 'is-active' : '', label); b.type = 'button'; b.dataset.zoom = k; b.addEventListener('click', () => { view.zoom = k; zoom.querySelectorAll('button').forEach((x) => x.classList.toggle('is-active', x === b)); applyZoom(); }); zoom.append(b); });
     const mode = el('span', 'mode-label'); mode.id = 'mode-label';
     const move = el('button', 'btn', '名前や番号で移す'); move.type = 'button'; move.id = 'move-open'; move.addEventListener('click', () => { view.movePanel = !view.movePanel; renderMovePanel(); });
-    const undo = el('button', 'btn', '元に戻す'); undo.type = 'button'; undo.id = 'move-undo'; undo.addEventListener('click', () => { App.undoLast(); paintBar(); });
     const auto = el('button', 'btn', '自動に戻す'); auto.type = 'button'; auto.id = 'move-auto'; auto.addEventListener('click', () => askAuto(auto));
-    if (state.readOnly) bar.append(tabs, zoom, findBox()); else bar.append(tabs, zoom, findBox(), mode, move, undo, auto);
+    if (state.readOnly) bar.append(tabs, zoom, findBox()); else bar.append(tabs, zoom, findBox(), mode, move, auto); // 元に戻すは上の帯の1つ（どの直しも同じ記録・PO 2026-11-07）
     const usage = el('div', 'usage'); usage.id = 'usage'; usage.setAttribute('aria-label', '列ごとの使い方');
     const note = el('p', 'sheet-note', '区分の見出しを掴むとかたまりごと、商品の行を掴むとその1行だけ動きます。Esc で取り消せます。首都圏と北関東はいつも一緒に動きます。');
     const panel = el('div', 'move-panel'); panel.id = 'move-panel'; panel.hidden = true;
@@ -103,7 +102,7 @@
     const manual = kind && db().status[kind] === '手直し';
     mode.textContent = !kind ? '月間商品' : (manual ? '手直し（自動では動きません）' : '自動（いつも連動）');
     mode.classList.toggle('is-manual', Boolean(manual));
-    $('#move-auto').disabled = !manual; $('#move-undo').disabled = !state.undo.length;
+    $('#move-auto').disabled = !manual;
     $('#move-open').disabled = !kind;
   }
   function paintUsage(preview) {
@@ -530,18 +529,29 @@
     if (button.dataset.sure !== '1') { button.dataset.sure = '1'; button.dataset.idleLabel = '自動に戻す'; button.textContent = 'もう一度押すと、手直しを捨てて決め直します'; window.setTimeout(() => { if (button.dataset.sure === '1') { button.dataset.sure = ''; button.textContent = '自動に戻す'; delete button.dataset.idleLabel; } }, 5000); return; }
     button.dataset.sure = ''; delete button.dataset.idleLabel; button.textContent = '自動に戻す';
     const done = App.busyButton(button, '決め直しています…');
-    App.flush();
-    const t0 = performance.now();
     try {
-      const data = await App.serial(() => App.api('setPlacementMode', { month: state.month, kind, requestId: App.rid() }));
-      C.resetToAuto(db(), kind); // 手元でも同じ部品で（窓口の返事と同じ結果）
-      if (data.changes && data.changes.length) C.applyChanges(db(), data.changes);
-      db().status[kind] = '自動'; state.undo = [];
-      App.refresh([]); App.perfNote('自動に戻す', t0);
-      if (state.view === 'sheet') render();
+      const d = await resetAuto(kind);
+      // 元に戻す: 手直しの置き方へ戻す（窓口も手直しに数える）・やり直す: もう一度決め直す（PO 2026-11-07「どの動きでも一つ前に戻る」）
+      if (d.after.length) App.remember({ label: '自動に戻す（' + kind + '）', noMerge: true,
+        undo: async () => { const p = App.change(d.before, { label: '元に戻す', noHistory: true }); if (p) throw new Error(p); App.flush(); db().status[kind] = '手直し'; App.refresh([]); if (state.view === 'sheet') render(); paintBar(); toast('元に戻しました: 自動に戻す（' + kind + '）の前の手直しの置き方'); },
+        redo: async () => { await resetAuto(kind); toast('やり直しました: 自動に戻す（' + kind + '）'); } });
       toast('元の形から決め直しました。');
     } catch (error) { toast('決め直せませんでした: ' + error.message, true); }
     finally { done(); paintBar(); }
+  }
+  /** 自動に戻す（窓口で決め直し、手元も同じ部品で）。前と後の置き方の違いを返す */
+  async function resetAuto(kind) {
+    App.flush();
+    const t0 = performance.now();
+    const snap = App.snapLayout();
+    const data = await App.serial(() => App.api('setPlacementMode', { month: state.month, kind, requestId: App.rid() }));
+    C.resetToAuto(db(), kind); // 手元でも同じ部品で（窓口の返事と同じ結果）
+    if (data.changes && data.changes.length) C.applyChanges(db(), data.changes);
+    db().status[kind] = '自動';
+    App.refresh([]); App.perfNote('自動に戻す', t0);
+    if (state.view === 'sheet') render();
+    paintBar();
+    return App.diffLayout(snap);
   }
 
   App.views.sheet = {

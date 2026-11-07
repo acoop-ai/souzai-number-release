@@ -173,14 +173,27 @@
     paint(); changed(false);
     return sec;
   }
+  /** 元に戻す・やり直す: 値段を記録の値にして保存し、設定の画面を開いていれば描き直す */
+  async function applyPack(month, text, what) {
+    if (month !== state.month) throw new Error('開いている月が替わったので、パックの値段は戻せません');
+    const nums = C.parsePack(text) || C.packOf(state.db);
+    pack.month = month; pack.rows = nums.map((r) => r.map(String)); window.clearTimeout(pack.timer); pack.pending = null;
+    pack.saved = C.packText(nums); // 描き直しが、同じ値の保存をもう一度予約しないように（記録は積まない）
+    if (state.view === 'settings') renderSettings();
+    await savePack(month, nums, C.packText(nums), $('#pack-state') || el('p'), true);
+    toast(what + ': パックの値段（' + App.monthText(month) + '）');
+  }
   function flushPack() { window.clearTimeout(pack.timer); pack.timer = 0; const p = pack.pending; pack.pending = null; if (p) savePack(p.month, p.nums, p.text, p.note); }
-  async function savePack(month, nums, text, note) {
+  async function savePack(month, nums, text, note, noHistory) {
     const t0 = performance.now();
+    const beforeText = month === pack.month ? pack.saved : '';
     note.className = 'pack-state is-busy'; note.replaceChildren(App.spinner ? App.spinner() : '', document.createTextNode(' 保存しています…'));
     try {
       await App.serial(() => App.api('savePack', { month, rows: nums, requestId: App.rid() }));
       if (month === state.month) { state.db.status[C.PACK_KIND] = text; App.refresh([]); }
       if (month === pack.month) pack.saved = text; App.perfNote('パックの値段を保存する', t0);
+      // 元に戻す・やり直すの記録（続けて打った分は1回）
+      if (!noHistory && beforeText && beforeText !== text) App.remember({ label: 'パックの値段（' + App.monthText(month) + '）', mergeKey: 'pack|' + month, undo: () => applyPack(month, beforeText, '元に戻しました'), redo: () => applyPack(month, text, 'やり直しました') });
       if (C.packText(pack.rows.map((r) => r.map((v) => Number(digits(v))))) === text) { note.className = 'pack-state is-ok'; note.textContent = '✓ 保存しました（番号表と Excel の絵が変わりました）'; }
     } catch (error) {
       note.className = 'pack-state is-bad'; note.textContent = '保存できませんでした: ' + error.message;

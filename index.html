@@ -8,23 +8,23 @@
   <meta name="referrer" content="no-referrer">
   <title>商品呼出番号表</title>
   <meta name="application-name" content="商品呼出番号表">
-  <script src="oauth-return.js?v=0.2.3"></script>
-  <link rel="stylesheet" href="styles.css?v=0.2.3">
-  <script src="config.js?v=0.2.3" defer></script>
-  <script src="login.js?v=0.2.3" defer></script>
-  <script src="search-norm.js?v=0.2.3" defer></script>
-  <script src="core.js?v=0.2.3" defer></script>
-  <script src="pack-picture.js?v=0.2.3" defer></script>
-  <script src="sheet-model.js?v=0.2.3" defer></script>
-  <script src="xlsx-write.js?v=0.2.3" defer></script>
-  <script src="app.js?v=0.2.3" defer></script>
-  <script src="view-list.js?v=0.2.3" defer></script>
-  <script src="view-reader.js?v=0.2.3" defer></script>
-  <script src="view-sheet.js?v=0.2.3" defer></script>
-  <script src="view-more.js?v=0.2.3" defer></script>
-  <script src="import-merge.js?v=0.2.3" defer></script>
-  <script src="import-summary.js?v=0.2.3" defer></script>
-  <script src="view-month.js?v=0.2.3" defer></script>
+  <script src="oauth-return.js?v=0.2.4"></script>
+  <link rel="stylesheet" href="styles.css?v=0.2.4">
+  <script src="config.js?v=0.2.4" defer></script>
+  <script src="login.js?v=0.2.4" defer></script>
+  <script src="search-norm.js?v=0.2.4" defer></script>
+  <script src="core.js?v=0.2.4" defer></script>
+  <script src="pack-picture.js?v=0.2.4" defer></script>
+  <script src="sheet-model.js?v=0.2.4" defer></script>
+  <script src="xlsx-write.js?v=0.2.4" defer></script>
+  <script src="app.js?v=0.2.4" defer></script>
+  <script src="view-list.js?v=0.2.4" defer></script>
+  <script src="view-reader.js?v=0.2.4" defer></script>
+  <script src="view-sheet.js?v=0.2.4" defer></script>
+  <script src="view-more.js?v=0.2.4" defer></script>
+  <script src="import-merge.js?v=0.2.4" defer></script>
+  <script src="import-summary.js?v=0.2.4" defer></script>
+  <script src="view-month.js?v=0.2.4" defer></script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -48,6 +48,7 @@
     <div class="tb-right" id="tb-right" hidden>
       <button id="alert-chip" class="alert-chip" type="button" title="アラートのある行だけを一覧に出します">アラート <b id="alert-count">0</b></button>
       <span id="save-state" class="save-state" role="status" aria-live="polite">✓ 自動保存</span>
+      <span class="undo-group" id="undo-group" role="group" aria-label="元に戻す・やり直す"><button id="undo-btn" class="btn btn-small btn-icon" type="button" disabled title="元に戻す物はまだありません" aria-label="元に戻す">↶</button><button id="redo-btn" class="btn btn-small btn-icon" type="button" disabled title="やり直す物はありません" aria-label="やり直す">↷</button></span>
       <button id="excel-button" class="btn" type="button">Excel</button>
       <a class="btn" href="guide.html" id="guide-link">ガイド</a>
       <div class="menu-wrap">

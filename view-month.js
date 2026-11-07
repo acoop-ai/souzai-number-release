@@ -7,7 +7,7 @@
   const App = window.SouzaiApp;
   const { $, el, C, state, toast, busyButton, api, rid, monthText } = App;
   const M = window.SouzaiImportMerge;
-  const V = '0.2.3';
+  const V = '0.2.4';
   const panel = $('#month-panel'), button = $('#month-add');
   const queue = []; // { key, file, name, status: 'reading'|'ready'|'bad'|'dup'|'done', kind, month, result, merge, summary, note, rid }
   let costsMemo = null; // 比べるための原価（この画面の中だけ・端末に残さない）

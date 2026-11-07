@@ -1,7 +1,7 @@
 'use strict';
 // 取り込むファイルを読む作業場所（画面の外＝大きな .xls を読んでいる間も、画面は止まらない）。読むだけで、どこへも送らない。
 //   何の物か（手作りの番号表・サマリー）は、ファイルの名前でなく中身（見えるシートの名前）で決める。
-importScripts('core.js?v=0.2.3', 'search-norm.js?v=0.2.3', 'book-read.js?v=0.2.3', 'import-table.js?v=0.2.3', 'import-summary.js?v=0.2.3');
+importScripts('core.js?v=0.2.4', 'search-norm.js?v=0.2.4', 'book-read.js?v=0.2.4', 'import-table.js?v=0.2.4', 'import-summary.js?v=0.2.4');
 function kindOf(book) {
   const names = book.sheets.filter((s) => s.state === 'visible').map((s) => s.name);
   if (names.some((n) => /寿司・弁当|焼き物/.test(n))) return 'table';

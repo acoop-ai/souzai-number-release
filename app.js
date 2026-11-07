@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.3）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.4）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.3';
+  const APP_VERSION = 'souzai-number-api-0.2.4';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -24,7 +24,7 @@
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
   const monthText = (m) => { const x = /^(\d{4})-(\d{2})$/.exec(String(m)); return x ? x[1] + '年' + Number(x[2]) + '月' : String(m); };
 
-  const state = { clientId: '', session: null, principal: null, db: null, months: [], month: '', view: 'list', alerts: [], alertsByPid: new Map(), gaps: { price: new Set(), cost: new Set() }, showCosts: false, readOnly: false, viewPictures: null, logRow: 0, undo: [], tokenClient: null, tokenJob: null, gisLoading: null, loggingIn: false, leaving: false, words: null };
+  const state = { clientId: '', session: null, principal: null, db: null, months: [], month: '', view: 'list', alerts: [], alertsByPid: new Map(), gaps: { price: new Set(), cost: new Set() }, showCosts: false, readOnly: false, viewPictures: null, logRow: 0, undo: [], redo: [], tokenClient: null, tokenJob: null, gisLoading: null, loggingIn: false, leaving: false, words: null };
   const views = {}; // 画面ごとの部品（list・reader・sheet・log・settings）
   const FORM_CLASS = { '定番': 'f-reg', '月間特売': 'f-sale', '新商品': 'f-new', '月間特売・新商品': 'f-both', 'カット商品': 'f-cut', '休み': 'f-rest', '終売': 'f-off', '計画': 'f-off' };
   function readPref() { try { const o = JSON.parse(store()?.getItem(PREF_KEY) || 'null'); return o && typeof o === 'object' && o.accounts ? o : { last: '', accounts: {} }; } catch { return { last: '', accounts: {} }; } }
@@ -171,8 +171,10 @@
     if (!list.length) return '';
     for (const c of list) for (const k of Object.keys(c.f)) { const p = C.fieldProblem(c.t, k, c.f[k]); if (p) return p; }
     C.beforeOf(state.db, list).forEach((b) => Object.keys(b.f).forEach((k) => { const key = b.t + '|' + b.id + '|' + k; if (!save.before.has(key)) save.before.set(key, b.f[k]); }));
+    const before = opts.noHistory ? null : beforeAll(state.db, list);
     C.applyChanges(state.db, list);
     queueChanges(list, opts.label);
+    if (before) remember({ steps: [{ before, after: cloneChanges(list), saveLabel: opts.label || '直す' }] });
     refresh(list);
     return '';
   }
@@ -232,7 +234,7 @@
     const statusBefore = db.status[kind];
     C.applyChanges(db, changes);
     db.status[kind] = '手直し';
-    state.undo.push({ label: label || '動かす', before, kind, statusBefore });
+    const entry = remember({ label: label || '動かす', steps: [{ before, after: cloneChanges(changes), saveLabel: '元に戻す' }], kind, statusBefore, noMerge: true });
     refresh(changes);
     const requestId = rid();
     const t0 = performance.now();
@@ -245,27 +247,160 @@
         perfNote('動かす', t0); stampNow();
         views.sheet && views.sheet.markDirty();
       } catch (error) {
-        C.applyChanges(db, before); db.status[kind] = statusBefore; state.undo.pop();
+        C.applyChanges(db, before); db.status[kind] = statusBefore; forget(entry);
         refresh(before);
         toast('動かせませんでした: ' + error.message, true);
       }
     });
     return true;
   }
-  function undoLast() {
-    const last = state.undo.pop(); if (!last) return;
-    const p = change(last.before, { label: '元に戻す' });
-    if (p) { toast(p, true); return; }
-    flush();
-    toast('元に戻しました（' + last.label + '）。');
+  // ------------------------------------------------------------ 元に戻す・やり直す（PO 2026-11-07「どの動きでも一つ前に戻るで、いくつも修正前に戻れる」）
+  //   1回の操作＝1つの記録（steps: [{ before, after, saveLabel }]）。直す入口（change・動かす・自動の置き直し・自動に戻す・新しい商品・パックの値段）が積む。
+  //   開いている月の、この画面の間だけ覚える（開き直したら、記録のタブの「前の値に戻す」）。同じ欄を続けて打った分は1回にまとめる。
+  //   ほかの人があとから同じ欄を直していたら、その欄は戻さない（人の直しを消さない）。月を作る・取り込む・消す・店に公開は入れない（それぞれに戻す道がある）
+  const HISTORY_MAX = 200, MERGE_MS = 4000;
+  const cloneChanges = (list) => list.map((c) => ({ t: c.t, id: c.id, f: Object.assign({}, c.f) }));
+  /** 直す前の値（原価も。core の beforeOf は原価の表を見ないので、ここで足す） */
+  function beforeAll(db, list) {
+    const out = C.beforeOf(db, list);
+    list.forEach((c) => { if (c.t !== '原価' || !db.costs) return; const o = db.costs.get(String(c.id)) || {}; const f = {}; Object.keys(c.f).forEach((k) => { f[k] = o[k] === undefined ? '' : o[k]; }); out.push({ t: '原価', id: c.id, f }); });
+    return out;
   }
+  const fieldKey = (st) => (st.after.length === 1 && Object.keys(st.after[0].f).length === 1 ? st.after[0].t + '|' + st.after[0].id + '|' + Object.keys(st.after[0].f)[0] : '');
+  /** 記録に積む（やり直すは捨てる）。同じ1欄を続けて直したときは、前の記録の「後」だけを替える */
+  function remember(entry) {
+    if (state.readOnly) return null;
+    entry.at = Date.now();
+    const last = state.undo[state.undo.length - 1];
+    const key = !entry.noMerge && !entry.undo && entry.steps && entry.steps.length === 1 ? fieldKey(entry.steps[0]) : '';
+    if (key && last && !last.noMerge && !last.undo && last.steps.length === 1 && fieldKey(last.steps[0]) === key && entry.at - last.at < MERGE_MS && last.steps[0].saveLabel === entry.steps[0].saveLabel) {
+      last.steps[0].after = entry.steps[0].after; last.at = entry.at; last.label = '';
+      state.redo = []; paintUndo(); return last;
+    }
+    if (entry.mergeKey && last && last.mergeKey === entry.mergeKey && entry.at - last.at < MERGE_MS) { last.redo = entry.redo; last.at = entry.at; if (entry.label) last.label = entry.label; state.redo = []; paintUndo(); return last; }
+    state.undo.push(entry); if (state.undo.length > HISTORY_MAX) state.undo.shift();
+    state.redo = []; paintUndo();
+    return entry;
+  }
+  /** 行と区分の置き場の写し（自動の置き直し・自動に戻すの、前と後を比べるため） */
+  function snapLayout() { const db = state.db; const cp = (m) => new Map([...m].map(([k, v]) => [k, Object.assign({}, v)])); return { rows: cp(db.rows), places: cp(db.places) }; }
+  function diffLayout(snap) {
+    const db = state.db; const before = [], after = [];
+    [['行', db.rows, snap.rows], ['置き場', db.places, snap.places]].forEach(([t, now, old]) => now.forEach((o, id) => {
+      const p = old.get(id); if (!p) return; const fb = {}, fa = {};
+      Object.keys(o).forEach((k) => { if (k.charAt(0) === '_' || typeof o[k] === 'object') return; if (String(o[k] ?? '') !== String(p[k] ?? '')) { fb[k] = p[k] === undefined ? '' : p[k]; fa[k] = o[k]; } });
+      if (Object.keys(fa).length) { before.push({ t, id, f: fb }); after.push({ t, id, f: fa }); }
+    }));
+    return { before, after };
+  }
+  function forget(entry) { const i = state.undo.lastIndexOf(entry); if (i >= 0) state.undo.splice(i, 1); paintUndo(); }
+  /** 直前の記録に、同じ操作の続き（自動の置き直しなど）を足す。1秒より前の記録なら別の記録にする */
+  function rememberMore(step) {
+    const last = state.undo[state.undo.length - 1];
+    if (last && !last.undo && Date.now() - last.at < 1500) { last.steps.push(step); last.noMerge = true; paintUndo(); return last; }
+    return remember({ steps: [step], noMerge: true });
+  }
+  // 記録の名前（ボタンとお知らせに出す）: 1欄なら「番号 名前 欄 前→後」
+  const short = (v) => { const t = String(v === null || v === undefined ? '' : v).replace(/\s+/g, ' ').trim(); return t === '' ? '（空）' : (t.length > 14 ? t.slice(0, 14) + '…' : t); };
+  function whoOf(c) {
+    const db = state.db;
+    if (c.t === '商品' || c.t === '原価') { const p = db.products.get(String(c.id)); return p ? [halfOf(p['呼出番']), short(C.nfkc(p['名前']))].filter(Boolean).join(' ') : String(c.id); }
+    if (c.t === '行') { const r = db.rows.get(String(c.id)); const p = r && r['商品ID'] ? db.products.get(String(r['商品ID'])) : null; return p ? [halfOf(p['呼出番']), short(C.nfkc(p['名前']))].filter(Boolean).join(' ') : '空き行'; }
+    if (c.t === '置き場') { const sc = db.sections.get(String(c.id)); return sc ? short(C.nfkc(sc['表題'])) : '区分'; }
+    if (c.t === '月間') { const m = db.monthly.find((x) => String(x['行ID']) === String(c.id)); return m ? short(m['商品名']) : '月間商品'; }
+    return '';
+  }
+  const halfOf = (v) => (v === null || v === undefined ? '' : C.nfkc(String(v)).trim());
+  function labelOf(entry) {
+    if (entry.label) return entry.label;
+    const st = entry.steps[0]; const a = st.after;
+    if (a.length === 1 && Object.keys(a[0].f).length === 1) {
+      const k = Object.keys(a[0].f)[0]; const b = (st.before.find((x) => x.t === a[0].t && String(x.id) === String(a[0].id)) || { f: {} }).f[k];
+      const fmt = (v) => (k === '粗利（包材値上前）' && v !== '' && v !== null && v !== undefined ? C.grossText(v) : short(v));
+      return whoOf(a[0]) + ' ' + k + ' ' + fmt(b) + '→' + fmt(a[0].f[k]);
+    }
+    const n = entry.steps.reduce((s, x) => s + x.after.length, 0);
+    return (whoOf(a[0]) || '') + ' ほか ' + n + ' か所';
+  }
+  function paintUndo() {
+    const u = $('#undo-btn'), r = $('#redo-btn'); if (!u || !r) return;
+    const grp = $('#undo-group'); if (grp) grp.hidden = Boolean(state.readOnly);
+    const lu = state.undo[state.undo.length - 1], lr = state.redo[state.redo.length - 1];
+    u.disabled = !lu; r.disabled = !lr;
+    u.title = lu ? '元に戻す（' + state.undo.length + '）: ' + labelOf(lu) + '（Ctrl+Z）' : '元に戻す物はまだありません';
+    r.title = lr ? 'やり直す: ' + labelOf(lr) + '（Ctrl+Y）' : 'やり直す物はありません';
+    u.setAttribute('aria-label', '元に戻す' + (state.undo.length ? '（' + state.undo.length + '）' : ''));
+    if (views.sheet && views.sheet.paintBar) views.sheet.paintBar();
+  }
+  /** 記録の1つを、後→前（戻す）か 前→後（やり直す）へ当てる。ほかの人があとから直した欄は飛ばす */
+  function applyEntry(entry, back) {
+    const db = state.db; let skipped = 0; const touched = [];
+    flush(); // 打ちかけの直しを先に送る（ラベルを混ぜない）
+    const steps = back ? entry.steps.slice().reverse() : entry.steps;
+    for (const st of steps) {
+      const want = back ? st.after : st.before, to = back ? st.before : st.after; // want＝いまそうなっているはずの値
+      const now = beforeAll(db, cloneChanges(want));
+      const list = [];
+      to.forEach((c) => {
+        const cur = now.find((x) => x.t === c.t && String(x.id) === String(c.id)); const exp = want.find((x) => x.t === c.t && String(x.id) === String(c.id));
+        const f = {};
+        Object.keys(c.f).forEach((k) => { const same = !cur || !exp || exp.f[k] === undefined || String(cur.f[k] ?? '') === String(exp.f[k] ?? ''); if (same) f[k] = c.f[k]; else skipped++; });
+        if (Object.keys(f).length) list.push({ t: c.t, id: c.id, f });
+      });
+      if (!list.length) continue;
+      const saveLabel = st.saveLabel === 'カット商品' ? 'カット商品' : (back ? '元に戻す' : (st.saveLabel || '直す'));
+      const p = change(list, { label: saveLabel, noHistory: true });
+      if (p) { toast(p, true); return false; }
+      flush();
+      touched.push(...list);
+    }
+    if (views.sheet) views.sheet.markDirty();
+    flashRows(touched);
+    return { skipped };
+  }
+  async function undo() {
+    const e = state.undo.pop(); if (!e) return;
+    const label = labelOf(e);
+    if (e.undo) { paintUndo(); try { await e.undo(); if (e.redo) state.redo.push(e); } catch (error) { toast('元に戻せませんでした: ' + error.message, true); } paintUndo(); return; }
+    const r = applyEntry(e, true); if (!r) { state.undo.push(e); paintUndo(); return; }
+    state.redo.push(e); paintUndo();
+    toast('元に戻しました: ' + label + (r.skipped ? '（ほかの人があとから直した ' + r.skipped + ' 欄は、そのままにしました）' : ''), false, { label: 'やり直す', run: () => redo() });
+  }
+  async function redo() {
+    const e = state.redo.pop(); if (!e) return;
+    const label = labelOf(e);
+    if (e.redo) { paintUndo(); try { await e.redo(); state.undo.push(e); } catch (error) { toast('やり直せませんでした: ' + error.message, true); } paintUndo(); return; }
+    const r = applyEntry(e, false); if (!r) { state.redo.push(e); paintUndo(); return; }
+    state.undo.push(e); paintUndo();
+    toast('やり直しました: ' + label + (r.skipped ? '（ほかの人があとから直した ' + r.skipped + ' 欄は、そのままにしました）' : ''));
+  }
+  const undoLast = undo; // 番号表の「元に戻す」も同じ記録を戻す
+  function flashRows(list) {
+    const pids = new Set();
+    list.forEach((c) => { if (c.t === '商品' || c.t === '原価') pids.add(String(c.id)); else if (c.t === '行') { const r = state.db.rows.get(String(c.id)); if (r && r['商品ID']) pids.add(String(r['商品ID'])); } });
+    let first = null;
+    pids.forEach((pid) => document.querySelectorAll('tr.lr[data-pid="' + CSS.escape(pid) + '"]').forEach((tr) => { tr.classList.remove('is-undone'); void tr.offsetWidth; tr.classList.add('is-undone'); if (!first) first = tr; }));
+    if (first && state.view === 'list') first.scrollIntoView({ block: 'nearest' });
+  }
+  $('#undo-btn').addEventListener('click', () => undo());
+  $('#redo-btn').addEventListener('click', () => redo());
+  // Ctrl+Z／Ctrl+Y（Ctrl+Shift+Z）。打っている欄の中では、その欄の字の戻し（ブラウザの物）を優先する
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || state.readOnly || !state.db) return;
+    const t = e.target; if (t && (t.closest('input, textarea, select, [contenteditable="true"]'))) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  });
   /** 販売形態を変えたあと: 自動の月は、上限を超えたら置き場を決め直す（置き場はいつも連動）。手直しの月は動かさない */
   function afterFormChange(kind) {
     const db = state.db;
     if (db.status[kind] === '手直し') return;
     const used = C.usedOfKind(db, kind), caps = C.capsOfKind(db, kind);
     if (!Object.keys(caps).some((b) => (used[b] || 0) > caps[b])) return;
+    const snap = snapLayout();
     const res = C.autoPlace(db, kind); // 手元でも同じ部品で決める（0 往復で見える）
+    const d = diffLayout(snap); if (d.after.length) rememberMore({ before: d.before, after: d.after, saveLabel: 'カット商品' }); // 戻すときは手直しに数えない（販売形態で決まる置き場）
     refresh(res.changes);
     flush();
     const requestId = rid();
@@ -298,7 +433,7 @@
     state.published = new Set(C.rowsOf((data.tables && data.tables['月の状態']) || []).filter((r) => r['表の種類'] === PUBLISH_KIND && r['形'] === '公開').map((r) => String(r['月'])));
     state.principal = data.principal;
     state.logRow = Number(data.logRow) || 0;
-    state.undo = [];
+    state.undo = []; state.redo = []; paintUndo();
     const isView = state.principal.role === 'VIEW';
     state.readOnly = isView;
     noteAccount(state.principal.email, isView);
@@ -461,7 +596,8 @@
     try {
       const data = await serial(() => api('cancelProduct', { month: state.month, id: String(pid), requestId: rid() }));
       const gone = new Set(data.rows || []);
-      state.undo = state.undo.filter((u) => !u.before.some((b) => b.t === '行' && gone.has(String(b.id))));
+      const touches = (u) => (u.steps || []).some((st) => st.before.concat(st.after).some((b) => (b.t === '行' && gone.has(String(b.id))) || ((b.t === '商品' || b.t === '原価') && String(b.id) === String(pid))));
+      state.undo = state.undo.filter((u) => !touches(u)); state.redo = state.redo.filter((u) => !touches(u)); paintUndo();
       C.applyChanges(state.db, [{ t: '消す商品', id: String(pid) }]);
       if (views.list) views.list.removeRows(String(pid), [...gone].map(String)); // その行だけ消す（全部を作り直さない）
       refresh([]);
@@ -582,7 +718,7 @@
     if (redirect && redirect.error) setLoginHelp(HELP[redirect.error] || HELP.unknown);
   }
 
-  window.SouzaiApp = { state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress };
+  window.SouzaiApp = { state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress };
   // 部品が全部読み込まれてから始める（defer の順に読まれ、DOMContentLoaded は全部のあと）
   window.addEventListener('DOMContentLoaded', () => { start().catch(() => {}); });
 })();

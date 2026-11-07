@@ -791,6 +791,8 @@
       closeFresh(); $('#new-name').value = '';
       const tr = insertRowOf(rowId); // 足した1行だけ差し込む（全部を作り直さない）
       App.refresh([{ t: '新しい商品', id: pid }]);
+      // 元に戻す＝足した商品を取り消す（窓口が確かめる。やり直すは無い＝もう一度足す）。自動の置き直しより先に積む（置き直しは別の記録で上に積まれる）
+      App.remember({ label: '新しい商品「' + name + '」を足した', noMerge: true, undo: async () => { if (!(await App.cancelProduct(pid))) throw new Error('取り消せませんでした'); } });
       App.afterFormChange(db().products.get(pid)['表の種類']);
       applyFilter();
       if (tr) { openDetail(tr); tr.scrollIntoView({ block: 'center' }); const c = tr.querySelector('[data-f="呼出番"]'); if (c) c.focus(); }
