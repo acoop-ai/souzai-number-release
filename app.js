@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.4）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.6）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.4';
+  const APP_VERSION = 'souzai-number-api-0.2.6';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -24,7 +24,7 @@
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
   const monthText = (m) => { const x = /^(\d{4})-(\d{2})$/.exec(String(m)); return x ? x[1] + '年' + Number(x[2]) + '月' : String(m); };
 
-  const state = { clientId: '', session: null, principal: null, db: null, months: [], month: '', view: 'list', alerts: [], alertsByPid: new Map(), gaps: { price: new Set(), cost: new Set() }, showCosts: false, readOnly: false, viewPictures: null, logRow: 0, undo: [], redo: [], tokenClient: null, tokenJob: null, gisLoading: null, loggingIn: false, leaving: false, words: null };
+  const state = { clientId: '', session: null, principal: null, db: null, months: [], month: '', view: 'list', alerts: [], alertsByPid: new Map(), gaps: { price: new Set(), cost: new Set() }, showCosts: false, readOnly: false, viewPictures: null, logRow: 0, undo: [], redo: [], tokenClient: null, tokenJob: null, gisLoading: null, loggingIn: false, leaving: false, words: null, wordsBaseVer: '', wordsLoadingVer: '', wordsOwn: new Set() };
   const views = {}; // 画面ごとの部品（list・reader・sheet・log・settings）
   const FORM_CLASS = { '定番': 'f-reg', '月間特売': 'f-sale', '新商品': 'f-new', '月間特売・新商品': 'f-both', 'カット商品': 'f-cut', '休み': 'f-rest', '終売': 'f-off', '計画': 'f-off' };
   function readPref() { try { const o = JSON.parse(store()?.getItem(PREF_KEY) || 'null'); return o && typeof o === 'object' && o.accounts ? o : { last: '', accounts: {} }; } catch { return { last: '', accounts: {} }; } }
@@ -445,7 +445,7 @@
     state.showCosts = Boolean(db.costs);
     state.viewPictures = isView ? (data.pictures || null) : null;
     state.db = db;
-    if (SN && data.words && !state.words) { state.words = data.words; try { SN.load(data.words); } catch {} }
+    takeWords(data.words);
     recompute();
     $('#login-panel').hidden = true; showNotice('');
     $('#month-nav').hidden = false; $('#view-tabs').hidden = isView; $('#tb-right').hidden = false; // 店は番号表だけ（PO 2026-11-07「店はマスターを見ない・一覧はなし」）＝切り替えのタブを出さない
@@ -467,9 +467,65 @@
     setView(state.view, true);
     if (wanted && !data.costs) fetchCostsThenShow(); // この端末で先に入った人がたたんでいて、頼まなかったとき
   }
+  // ------------------------------------------------------------ 探す欄の読みの表（2026-11-19 PO「漢字・ローマ字・全角半角いずれでも」）
+  //   窓口が返す（公開の画面には置かない）。本体（約 280KB・圧縮で約 80KB）は、この画面を開いている間に1回だけ受け取る（月の切り替えでは送らない＝指紋を送る）。
+  //   端末には覚えない（acoop-ai.github.io の端末の覚えは、ほかのアプリと共有＝容量を使わない・端末に残すのは札とタブと好みだけ）。
+  //   読み込みは、表を描いたあと手が空いたときに（開くのを待たせない）。読み込んだら、画面ごとの探す鍵を作り直す（wordsChanged）
+  const wordsVerHave = () => state.wordsBaseVer || state.wordsLoadingVer || ''; // 読んでいる途中の版も「持っている」と数える（月の切り替えで本体を二度送らせない）
+  // 読み込みは少しずつ（700 語ずつ・1回 12 ミリ秒まで・手が空いたときに）。店の PC（CPU 4倍遅い）で一度に読むと 0.5 秒ほど画面が止まったため（2026-11-19 測定）。
+  //   読みの表は足すほど増える作り（SearchNorm.load は何回呼んでも足すだけ）。別の書き方とかなの言葉は、読みを全部読んでから（一度に読んだときと同じ順）
+  const idle = (fn) => (window.requestIdleCallback ? window.requestIdleCallback(fn) : window.setTimeout(fn, 16));
+  //   探す欄で探すときは、読み終わっていなければ、その場で残りを読み切ってから探す（ensureWords・はじめの1回だけ・店の PC 相当で 0.3 秒ほど）＝探した答えに抜けを出さない
+  let wordsJob = null;
+  function ensureWords() { if (wordsJob && !wordsJob.done) wordsJob.now(); }
+  function takeWords(w) {
+    if (!SN || !w || typeof w.ver !== 'string') return;
+    if (wordsJob && !wordsJob.done) wordsJob.now(); // 前の読み込みが終わる前に月を替えたときは、前の分を読み切ってから（二つを並べて走らせない）
+    const base = typeof w.base === 'string' ? w.base : null;
+    const own = w.own && typeof w.own === 'object' ? w.own : {};
+    const t0 = performance.now(); let busy = 0, d = null, keys = [], i = 0;
+    const job = { done: false, now: null }; wordsJob = job;
+    const finish = () => {
+      if (job.done) return; job.done = true;
+      let added = 0;
+      try {
+        if (d) { SN.load({ alias: d.alias || [], word: d.word || [] }); state.words = { alias: d.alias || [] }; state.wordsBaseVer = w.ver; state.wordsLoadingVer = ''; added++; }
+        const fresh = {}; Object.keys(own).forEach((k) => { if (!state.wordsOwn.has(k)) { fresh[k] = own[k]; state.wordsOwn.add(k); } });
+        if (Object.keys(fresh).length) { SN.load({ yomi: fresh }); added++; }
+      } catch { /* 表が読めなくても、かな・カナ・ローマ字・全角半角では探せる */ }
+      if (added) { Object.values(views).forEach((v) => v.wordsChanged && v.wordsChanged()); perfNote('読みの表を読む', t0, '手が空いたときに少しずつ・動かした時間 ' + Math.round(busy) + ' ms'); }
+    };
+    const step = () => {
+      if (job.done) return;
+      const s0 = performance.now();
+      try {
+        while (i < keys.length && performance.now() - s0 < 12) { const part = {}; keys.slice(i, i + 700).forEach((k) => { part[k] = d.yomi[k]; }); SN.load({ yomi: part }); i += 700; }
+      } catch { i = keys.length; d = null; }
+      busy += performance.now() - s0;
+      if (i < keys.length) idle(step); else { const s1 = performance.now(); finish(); busy += performance.now() - s1; }
+    };
+    // 始めるのは、表を描き終えて（2コマあと）、ブラウザの手が本当に空いたとき（requestIdleCallback・急かす時間を付けない＝描く・送る手を止めない。
+    //   前に「1.5 秒たったら」で始めたときは、店の PC 相当で一覧を描いている途中に割り込んで、描くのが遅れた）。それより先に探す欄・名前の欄・包材の欄に入ったら、その時に始める
+    let started = false, later = 0;
+    const begin = () => {
+      if (started) return; started = true; window.clearTimeout(later); document.removeEventListener('focusin', onFocus, true);
+      try { if (base && state.wordsBaseVer !== w.ver && state.wordsLoadingVer !== w.ver) { state.wordsLoadingVer = w.ver; d = JSON.parse(base); keys = Object.keys(d.yomi || {}); } } catch { d = null; keys = []; state.wordsLoadingVer = ''; }
+      step();
+    };
+    job.now = () => { // 残りをその場で読み切る（探す欄で探すとき）
+      if (job.done) return;
+      if (!started) { started = true; window.clearTimeout(later); document.removeEventListener('focusin', onFocus, true); try { if (base && state.wordsBaseVer !== w.ver && state.wordsLoadingVer !== w.ver) { state.wordsLoadingVer = w.ver; d = JSON.parse(base); keys = Object.keys(d.yomi || {}); } } catch { d = null; keys = []; state.wordsLoadingVer = ''; } }
+      const s0 = performance.now();
+      try { while (i < keys.length) { const part = {}; keys.slice(i, i + 700).forEach((k) => { part[k] = d.yomi[k]; }); SN.load({ yomi: part }); i += 700; } } catch { i = keys.length; d = null; }
+      finish(); busy += performance.now() - s0;
+    };
+    const onFocus = (e) => { const t = e.target; if (t && t.matches && t.matches('input[type="search"], #new-name, [data-f="指定トレー"]')) begin(); };
+    document.addEventListener('focusin', onFocus, true);
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (!started) idle(begin); }));
+  }
   /** 開くときの頼み（本部の人で、たたんでいなければ原価も一緒に＝往復を増やさない） */
   async function fetchOpen(month) {
-    const data = {}; if (month) data.month = month;
+    const data = {}; if (month) data.month = month; data.wordsVer = wordsVerHave();
     if (wantsCosts()) data.withCosts = true;
     try { return await api('getWorkspace', data); }
     catch (error) { if (error.code === 'DENIED' && data.withCosts) { delete data.withCosts; return api('getWorkspace', data); } throw error; } // 好みを覚えていない端末の、見るだけの人
@@ -507,9 +563,28 @@
   }
 
   // ------------------------------------------------------------ 画面の切り替え
+  // ------------------------------------------------------------ ← 戻る・↑ TOP（上の帯の左の端・帯と一緒にいつも見える）
+  //   戻る＝ひとつ前に見ていた画面と表（番号表のタブも1つと数える）。前が無ければ薄くして押せない（消さない）。TOP＝いま見ている画面の、送る枠を全部いちばん上・左へ
+  const nav = { stack: [], busy: false };
+  function placeNow() { return { view: state.view, table: views.sheet && views.sheet.tableNow ? views.sheet.tableNow() : '' }; }
+  function notePlace(prev) { if (nav.busy || !prev || !prev.view) return; const last = nav.stack[nav.stack.length - 1]; if (!last || last.view !== prev.view || last.table !== prev.table) nav.stack.push(prev); if (nav.stack.length > 30) nav.stack.shift(); paintNav(); }
+  function paintNav() { const b = $('#nav-back'); if (b) b.disabled = !nav.stack.length; }
+  function goBack() {
+    const p = nav.stack.pop(); paintNav(); if (!p) return;
+    nav.busy = true;
+    try { setView(p.view); if (p.view === 'sheet' && p.table && views.sheet && views.sheet.openTableFromNav) views.sheet.openTableFromNav(p.table); } finally { nav.busy = false; }
+  }
+  function goTop() {
+    const box = $('#view-' + state.view); if (!box) return;
+    [box].concat(Array.from(box.querySelectorAll('*'))).forEach((n) => { if (n.scrollTop || n.scrollLeft) { n.scrollTop = 0; n.scrollLeft = 0; } });
+    window.scrollTo(0, 0);
+  }
+  $('#nav-back').addEventListener('click', goBack);
+  $('#nav-top').addEventListener('click', goTop);
   function setView(name, force) {
     if (state.readOnly && name !== 'sheet') name = 'sheet'; // 店は番号表だけ
     if (state.view === name && !force) return;
+    if (state.view !== name && state.db) notePlace(placeNow());
     state.view = name;
     try { store()?.setItem(VIEW_KEY, name); } catch {}
     document.querySelectorAll('#view-tabs button').forEach((b) => { const on = b.dataset.view === name; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', String(on)); });
@@ -665,7 +740,7 @@
     state.loggingIn = true; showProgress('ログインして、読み込んでいます…');
     const t0 = performance.now();
     try {
-      const data = await api('startSession', { accessToken, withWorkspace: true, withCosts: wantsCosts() }, false);
+      const data = await api('startSession', { accessToken, withWorkspace: true, withCosts: wantsCosts(), wordsVer: wordsVerHave() }, false);
       saveSession({ t: data.session, e: Number(data.expiresAt) || Date.now() + 7 * 86400000 });
       applyWorkspace(data.workspace);
       perfNote('ログイン', t0);
@@ -718,7 +793,7 @@
     if (redirect && redirect.error) setLoginHelp(HELP[redirect.error] || HELP.unknown);
   }
 
-  window.SouzaiApp = { state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress };
+  window.SouzaiApp = { ensureWords, notePlace, placeNow, state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress };
   // 部品が全部読み込まれてから始める（defer の順に読まれ、DOMContentLoaded は全部のあと）
   window.addEventListener('DOMContentLoaded', () => { start().catch(() => {}); });
 })();

@@ -7,7 +7,7 @@
   const FORM_CLASS = App.FORM_CLASS;
   const FORM_NOTE = { '定番': '番号表に載る', '月間特売': '番号表に載る・ピンクの字', '新商品': '番号表に載る・水色のセル', 'カット商品': '≪カット商品≫ に載る・次の月は休み', '休み': '番号表に載らない', '終売': '番号表に載らない・次の月の一覧には載らない', '計画': '番号表に載らない・番号の管理に残す' };
   const CHIPS = ['全部', 'アラート', '抜け', '定番', '月間特売', '新商品', 'カット商品', '休み', '終売', '計画'];
-  const view = { built: false, rows: [], rowEls: new Map(), byPid: new Map(), chip: '全部', q: '', terms: null, sec: '', open: '', keys: new Map(), root: null, colCount: 0, menuFor: null, fx: { cell: null, mouse: false } };
+  const view = { order: (() => { try { const v = localStorage.getItem('souzai-number-list-order-v1'); return ['table', 'call', 'name'].includes(v) ? v : 'table'; } catch { return 'table'; } })(), built: false, rows: [], rowEls: new Map(), byPid: new Map(), chip: '全部', q: '', terms: null, sec: '', open: '', keys: new Map(), root: null, colCount: 0, menuFor: null, fx: { cell: null, mouse: false } };
   const db = () => state.db;
 
   // ------------------------------------------------------------ 値の形
@@ -29,7 +29,7 @@
     return k;
   }
   const hitKey = (k, terms) => (SN ? SN.hit(k, terms) : terms.every((x) => k.includes(x)));
-  const makeTerms = (q) => (SN ? SN.terms(q) : C.nfkc(q).toLowerCase().split(/\s+/).filter(Boolean));
+  const makeTerms = (q) => { if (App.ensureWords) App.ensureWords(); return SN ? SN.terms(q) : C.nfkc(q).toLowerCase().split(/\s+/).filter(Boolean); }; // 探す前に読みの表を読み切る（はじめの1回だけ）
 
   // ------------------------------------------------------------ 作る
   function secOrder() {
@@ -45,7 +45,8 @@
     secOrder().forEach((secId) => { (memo.get(secId) || []).forEach((r) => { if (r['商品ID'] && db().products.has(String(r['商品ID']))) out.push(r); }); });
     return out;
   }
-  function headHtml() { return '<tr><th class="c-call" scope="col">番号</th><th class="c-name" scope="col">名前</th><th class="c-form" scope="col">販売形態</th><th class="c-price" scope="col">定番価格</th><th class="c-sale" scope="col">特売価格</th>' + (state.showCosts ? '<th class="c-cost" scope="col">原価</th><th class="c-gross" scope="col">粗利</th><th class="c-cost c-after" scope="col">定番（包材後）</th>' : '') + '<th class="c-small" scope="col">小パック</th><th class="c-tray" scope="col">包材</th><th class="c-sec" scope="col">区分</th></tr>'; }
+  const sortTh = (k, label, cls) => '<th class="' + cls + (view.order === k ? ' is-sorted' : '') + '" scope="col"' + (view.order === k ? ' aria-sort="ascending"' : '') + '><button type="button" class="th-sort" data-order="' + k + '" title="' + (k === 'call' ? '押すと番号の小さい順（間に空いている番号）。もう一度押すと番号表の順' : '押すと名前の読みの順。もう一度押すと番号表の順') + '">' + label + '<span class="sort-mark">' + (view.order === k ? '↓' : '⇅') + '</span></button></th>';
+  function headHtml() { return '<tr>' + sortTh('call', '番号', 'c-call') + sortTh('name', '名前', 'c-name') + '<th class="c-form" scope="col">販売形態</th><th class="c-price" scope="col">定番価格</th><th class="c-sale" scope="col">特売価格</th>' + (state.showCosts ? '<th class="c-cost" scope="col">原価</th><th class="c-gross" scope="col">粗利</th><th class="c-cost c-after" scope="col">定番（包材後）</th>' : '') + '<th class="c-small" scope="col">小パック</th><th class="c-tray" scope="col">包材</th><th class="c-sec" scope="col">区分</th></tr>'; }
   function rowHtml(r) {
     const pid = String(r['商品ID']); const p = db().products.get(pid); const sec = db().sections.get(String(r['区分ID']));
     const name = C.nfkc(p['名前']).trim() === '' ? '（名前なし）' : String(p['名前']);
@@ -66,7 +67,7 @@
     const t0 = performance.now();
     const root = $('#view-list'); view.root = root; root.replaceChildren();
     const bar = el('div', 'list-bar');
-    const search = el('div', 'search-box'); const input = el('input'); input.id = 'list-search'; input.type = 'search'; input.placeholder = '名前・番号で探す（ひらがな・ローマ字も）'; input.setAttribute('aria-label', '商品を探す'); input.value = view.q; search.append(input);
+    const search = el('div', 'search-box'); const input = el('input'); input.id = 'list-search'; input.type = 'search'; input.placeholder = '名前・番号で探す（かな・漢字・ローマ字も）'; input.setAttribute('aria-label', '商品を探す'); input.value = view.q; search.append(input);
     const chips = el('div', 'chips'); chips.id = 'chips'; chips.setAttribute('role', 'group'); chips.setAttribute('aria-label', '絞り込み（凡例も兼ねる）');
     CHIPS.forEach((c) => { const b = el('button', 'chip'); b.type = 'button'; b.dataset.chip = c; chips.append(b); });
     const sel = el('select'); sel.id = 'list-section'; sel.setAttribute('aria-label', '区分で絞る');
@@ -74,8 +75,10 @@
     secOrder().forEach((id) => { const s = db().sections.get(id); if (!s) return; const o = el('option', '', C.nfkc(s['表題'])); o.value = id; sel.append(o); });
     sel.value = view.sec;
     const costBtn = el('button', 'btn', state.showCosts ? '原価を隠す' : '原価を表示'); costBtn.type = 'button'; costBtn.id = 'cost-button';
+    // 並び（PO 2026-11-07「番号や名前でソート・空いている番号も」）: 番号表の順（はじめ）・番号順（間に空いている番号）・名前順（読みの順）
+    // 並びは表の見出しで選ぶ（「番号」「名前」を押す・もう一度で番号表の順）。帯を1366 の幅でも1行のままにするため、帯には置かない
     bar.append(search, chips, sel, costBtn);
-    const hint = el('p', 'list-hint', '番号・価格はその場で打てます（自動で保存）。名前を押すと1商品の入力が開きます。薄い字の価格は番号表に出ません。薄い黄と点線のセルは抜け（空）です。月間特売と新商品の両方の行は、行が薄い赤・名前が薄い水色です。');
+    const hint = el('p', 'list-hint', '番号・価格はその場で打てます（自動で保存）。名前を押すと1商品の入力が開きます。薄い字の価格は番号表に出ません。薄い黄と点線のセルは抜け（空）です。月間特売と新商品の両方の行は、行が薄い赤・名前が薄い水色です。見出しの番号・名前で並べ替え（番号順は空き番号も）。');
     // 数式バー（Excel と同じ）: 選んだセルの中身の全文。縦に送っても動かない
     const fxBar = el('div', 'fx-bar'); fxBar.id = 'fx-bar';
     const fxLabel = el('span', 'fx-label', '選んだセル'); fxLabel.id = 'fx-label';
@@ -95,11 +98,12 @@
     view.built = true;
     bind(root);
     applyFilter();
+    if (view.order !== 'table') applyOrder();
     renderOthers();
     if (view.open) { const tr = view.rowEls.get(view.open); if (tr) openDetail(tr); else view.open = ''; }
     App.perfNote('一覧を作る', t0);
     // 探す鍵は、手が空いたときに作っておく（打ち始めで待たせない）
-    window.setTimeout(() => { const rows = view.rows.slice(); let i = 0; const step = () => { const t = performance.now(); while (i < rows.length && performance.now() - t < 8) { keyOf(String(rows[i]['商品ID']), rows[i]); i++; } if (i < rows.length) window.setTimeout(step, 0); }; step(); }, 50);
+    window.setTimeout(() => { const rows = view.rows.slice(); let i = 0; const step = () => { const t = performance.now(); while (i < rows.length && performance.now() - t < 8) { keyOf(String(rows[i]['商品ID']), rows[i]); warmReading(rows[i]); i++; } if (i < rows.length) window.setTimeout(step, 0); }; step(); }, 50);
   }
 
   // ------------------------------------------------------------ 1行を描き直す（打っている欄は触らない）
@@ -247,9 +251,72 @@
       const det = next && next.classList.contains('notice-row') ? next.nextElementSibling : next;
       if (det && det.classList.contains('detail-row')) det.hidden = !show;
     });
+    paintGaps();
     paintChips();
   }
   function setChip(c) { view.chip = c; if (view.built) { applyFilter(); renderOthers(); const s = $('#list-scroll'); if (s) s.scrollTop = 0; } }
+
+  // ------------------------------------------------------------ 並び（番号表の順・番号順・名前順）。行を作り直さず、並べ替えるだけ（行のお知らせと1商品の入力も一緒に動く）
+  //   番号順では、番号の間に「空いている番号」の行を出す（使っている番号＝マスターの全部の商品＋8月・9月の番号。1商品の入力の「空いている番号」と同じ決まり）。
+  //   直したあとは自動で並べ直さない（打っている行が動くと迷う）。並べ直すときは、もう一度ボタンを押す
+  const ORDER_KEY = 'souzai-number-list-order-v1';
+  const collator = new Intl.Collator('ja');
+  const callNum = (r) => { const p = db().products.get(String(r['商品ID'])); const n = Number(C.halfCall(p ? p['呼出番'] : '')); return Number.isFinite(n) && n > 0 ? n : Infinity; };
+  function nameKey(r) {
+    const p = db().products.get(String(r['商品ID'])); const name = p ? String(p['名前']) : '';
+    if (!SN || !SN.fold) return C.nfkc(name);
+    // 読み（かな）の順。漢字の名前も読みで並ぶ（探す欄と同じ読みの部品）。鍵は「名前 ＋ 印 読み 印 …」なので、最初の読みだけを取る（読みが無い＝かなだけの名前は名前そのもの）
+    const k = SN.key(name); const m = /\u0001([^\u0003]*)\u0003/.exec(k); return m ? m[1] : SN.fold(name);
+  }
+  // 並べる鍵は1行に1回だけ数える（比べるたびに数えない）。名前の読みは名前ごとに覚えておく（2回目からすぐ）
+  const readingMemo = new Map();
+  function warmReading(r) { const p = db().products.get(String(r['商品ID'])); const name = p ? String(p['名前']) : ''; if (!readingMemo.has(name)) readingMemo.set(name, nameKey(r)); } // 開いたあと手が空いたときに読みも作る（はじめての名前順で待たせない）
+  function sortedRows() {
+    if (view.order === 'call') { const keyed = view.rows.map((r, i) => ({ r, n: callNum(r), i })); keyed.sort((a, b) => a.n - b.n || a.i - b.i); return keyed; } // 同じ番号は番号表の順のまま
+    if (view.order === 'name') {
+      const keyed = view.rows.map((r, i) => { const p = db().products.get(String(r['商品ID'])); const name = p ? String(p['名前']) : ''; if (!readingMemo.has(name)) readingMemo.set(name, nameKey(r)); return { r, k: readingMemo.get(name), i }; });
+      keyed.sort((a, b) => collator.compare(a.k, b.k) || a.i - b.i); return keyed;
+    }
+    return view.rows.map((r, i) => ({ r, i }));
+  }
+  function usedCalls() {
+    const used = new Set();
+    db().products.forEach((p) => { const c = Number(C.halfCall(p['呼出番'])); if (c) used.add(c); });
+    (db().past || []).forEach((h) => ['8月の番号', '9月の番号'].forEach((k) => { const c = Number(C.halfCall(h[k])); if (c) used.add(c); }));
+    return used;
+  }
+  function gapRow(from, to, used) {
+    const free = []; for (let x = from + 1; x < to; x++) if (!used.has(x)) free.push(x);
+    if (!free.length) return null;
+    const ranges = []; free.forEach((x) => { const last = ranges[ranges.length - 1]; if (last && last[1] === x - 1) last[1] = x; else ranges.push([x, x]); });
+    const text = free.length <= 8 ? free.join('・') : ranges.map(([a, b]) => (a === b ? String(a) : a + '〜' + b)).join('・') + '（' + free.length + ' 個）';
+    const tr = el('tr', 'gap-row'); const td = el('td'); td.colSpan = view.colCount; td.append(el('span', 'gap-label', '空いている番号'), el('span', 'gap-nums', text)); tr.append(td);
+    return tr;
+  }
+  function applyOrder() {
+    const body = $('#list-body'); if (!body) return;
+    const t0 = performance.now();
+    body.querySelectorAll('tr.gap-row').forEach((x) => x.remove());
+    const groups = sortedRows().map((x) => { const tr = view.rowEls.get(String(x.r['行ID'])); if (!tr) return null; const g = [tr]; let n = tr.nextElementSibling; while (n && (n.classList.contains('notice-row') || n.classList.contains('detail-row'))) { g.push(n); n = n.nextElementSibling; } return { n: x.n, g }; }).filter(Boolean);
+    const frag = document.createDocumentFragment(); const used = view.order === 'call' ? usedCalls() : null; let prev = null;
+    groups.forEach(({ n, g }) => {
+      if (used && n !== Infinity) { if (prev !== null && n - prev > 1) { const gap = gapRow(prev, n, used); if (gap) frag.append(gap); } prev = n; }
+      g.forEach((x) => frag.append(x));
+    });
+    body.append(frag);
+    paintGaps();
+    App.perfNote('並べ替える（' + view.order + '）', t0);
+  }
+  /** 絞り込み・探す中は、空いている番号の行を出さない（間の行が隠れていて、どこの空きか分からなくなるため） */
+  function paintGaps() { const off = view.chip !== '全部' || Boolean(view.q && view.q.trim()) || Boolean(view.sec); document.querySelectorAll('#list-body tr.gap-row').forEach((x) => { x.hidden = off; }); }
+  function setOrder(k) {
+    view.order = k; try { localStorage.setItem(ORDER_KEY, k); } catch { /* 覚えなくても並ぶ */ }
+    const btns = [...document.querySelectorAll('#list-table .th-sort')];
+    btns.forEach((b) => { const on = b.dataset.order === k; b.closest('th').classList.toggle('is-sorted', on); if (on) b.closest('th').setAttribute('aria-sort', 'ascending'); else b.closest('th').removeAttribute('aria-sort'); b.querySelector('.sort-mark').textContent = on ? '…' : '⇅'; }); // 押したとたんに見える（店の PC では 0.3 秒ほどかかる）
+    document.body.classList.add('is-sorting');
+    const finish = () => { if (view.built) { applyOrder(); const s = $('#list-scroll'); if (s) s.scrollTop = 0; } btns.forEach((b) => { b.querySelector('.sort-mark').textContent = b.dataset.order === k ? '↓' : '⇅'; }); document.body.classList.remove('is-sorting'); };
+    window.requestAnimationFrame(() => window.setTimeout(finish, 0));
+  }
 
   // ------------------------------------------------------------ 足す・取り消す: その1行だけ（全部を作り直すと、行が多いぶん待たせる）
   function insertRowOf(rowId) {
@@ -264,6 +331,7 @@
     if (!view.byPid.has(tr.dataset.pid)) view.byPid.set(tr.dataset.pid, []);
     view.byPid.get(tr.dataset.pid).push(tr);
     paintRow(r, true);
+    if (view.order !== 'table') applyOrder(); // 足した行も、選んでいる並びの場所へ
     return tr;
   }
   function removeRowsOf(pid, rowIds) {
@@ -277,6 +345,7 @@
     });
     view.byPid.delete(pid); view.keys.delete(pid);
     view.rows = collect();
+    if (view.order !== 'table') applyOrder();
   }
 
   // ------------------------------------------------------------ 打つ（その場で直す）
@@ -408,6 +477,7 @@
   const tray = { input: null, items: [], active: -1, memo: new Map() };
   const trayList = () => (db().options['指定トレー'] || []).map((o) => String(o['値']));
   function trayHit(v, q) {
+    if (App.ensureWords) App.ensureWords();
     const nq = C.normTray(q).toLowerCase(); if (C.normTray(v).toLowerCase().includes(nq)) return true;
     if (!SN) return false;
     let k = tray.memo.get(v); if (k === undefined) { k = SN.key(v); tray.memo.set(v, k); }
@@ -564,6 +634,21 @@
   });
 
   // ------------------------------------------------------------ 1商品の入力（すぐ下に開く）
+  /** 開いている「1商品の入力」を、いまの値で描き直す（元に戻す・やり直す・ほかの人の直しのあと。PO 2026-11-07「戻った後にすぐに画面が切り替わるように」）。
+   *  打っている最中（入力の中に字の入れる所がある）は描き直さない。値が変わった欄は光らせる＝どこまで戻ったかが見える */
+  function refreshDetail(touched) {
+    if (!view.open) return;
+    const row = document.querySelector('tr.detail-row'); const box = row && row.querySelector('.detail'); if (!box) return;
+    const r = db().rows.get(view.open); if (!r || !r['商品ID']) return;
+    const pid = String(r['商品ID']);
+    if (touched && !touched.has(pid)) return;
+    const a = document.activeElement; if (a && box.contains(a) && a.matches('input, textarea, select')) return;
+    const valuesOf = () => { const m = new Map(); box.querySelectorAll('input, select, output').forEach((x, i) => m.set(i, x.value !== undefined && x.tagName !== 'OUTPUT' ? x.value : x.textContent)); return m; };
+    const before = valuesOf();
+    renderDetail(box, r, db().products.get(pid)); // 同じ高さで描き直すので、一覧の送り位置はそのまま（測り直させない＝大きな表の配置を数え直さない）
+    const now = [...box.querySelectorAll('input, select, output')];
+    now.forEach((x, i) => { const v = x.tagName !== 'OUTPUT' ? x.value : x.textContent; if (before.has(i) && before.get(i) !== v) x.classList.add('is-changed'); }); // 新しい欄なので、印を付けるだけで光る
+  }
   function closeDetail() {
     const old = document.querySelector('tr.detail-row'); if (old) old.remove();
     if (view.open) { const tr = view.rowEls.get(view.open); if (tr) { const b = tr.querySelector('.name-btn'); b.setAttribute('aria-expanded', 'false'); b.querySelector('.tw').textContent = '▶'; } }
@@ -616,7 +701,7 @@
       const m = App.change([{ t: '原価', id: pid, f: to }]); if (m) { toast(m, true); return; }
       gIn.value = C.grossText(to[GB]); pIn.value = showVal(to[PB]); paintRow(r);
       toast('いまの粗利 ' + C.grossText(to[GB]) + '・定番価格 ' + showVal(to[PB]) + ' を、値上げ前の控えへ写しました。続けて新しい原価を打ってください。', false, { label: '元に戻す', run: () => { if (!App.change([{ t: '原価', id: pid, f: back }])) { gIn.value = C.grossText(back[GB]); pIn.value = showVal(back[PB]); paintRow(r); } } });
-      costIn.v.focus(); costIn.v.select();
+      const first = document.querySelector('tr.detail-row .cost-block input') || costIn.v; first.focus(); first.select(); // 描き直したあとの原価の欄へ
     });
     const mid = el('div', 'cost-mid'); mid.append(copy);
     block.append(now, mid, before);
@@ -812,6 +897,8 @@
   // ------------------------------------------------------------ つなぐ
   function bind(root) {
     const scroll = $('#list-scroll');
+    // 見出しの「番号」「名前」: 押すとその順・並んでいる見出しをもう一度押すと番号表の順
+    scroll.querySelectorAll('thead .th-sort').forEach((b) => b.addEventListener('click', () => setOrder(view.order === b.dataset.order ? 'table' : b.dataset.order)));
     scroll.addEventListener('input', onInput);
     scroll.addEventListener('change', onChange);
     scroll.addEventListener('keydown', onKey);
@@ -848,10 +935,22 @@
   App.views.list = {
     show() { if (!state.db) return; if (state.readOnly) { App.views.reader.show(); return; } if (!view.built) build(); else { applyFilter(); renderOthers(); } },
     reset() { view.built = false; view.keys = new Map(); view.open = ''; tray.memo = new Map(); closeFresh(); closeFormMenu(); trayClose(); if (App.views.reader) App.views.reader.reset(); },
+    /** 読みの表を読み込んだあと（開いたあと手が空いたとき）: 探す鍵と名前の読みを作り直し、打ってある字で探し直す */
+    wordsChanged() {
+      view.keys = new Map(); tray.memo = new Map(); readingMemo.clear();
+      if (view.built && view.q && view.q.trim()) { view.terms = makeTerms(view.q); applyFilter(); }
+      const nn = document.querySelector('#new-name'); if (fresh.box && nn && nn.value.trim()) renderFresh(nn.value);
+      // 探す鍵を、手が空いたときに先に作っておく（はじめの1回の探すを待たせない・1回 12 ミリ秒まで）
+      const rows = view.rows.slice(); let i = 0;
+      const idle = (fn) => (window.requestIdleCallback ? window.requestIdleCallback(fn) : window.setTimeout(fn, 16));
+      const warm = () => { const s0 = performance.now(); while (i < rows.length && performance.now() - s0 < 12) { const r = rows[i++]; if (r && r['商品ID']) keyOf(String(r['商品ID']), r); } if (i < rows.length) idle(warm); };
+      idle(warm);
+    },
     update(touched) {
       if (!view.built || state.readOnly) return;
       const t0 = performance.now();
       touched.forEach((pid) => { const trs = view.byPid.get(String(pid)); if (trs) trs.forEach((tr) => { const r = db().rows.get(tr.dataset.rid); if (r) paintRow(r); }); });
+      refreshDetail(new Set([...touched].map(String)));
       paintChips();
       if (view.chip !== '全部' || view.q || view.sec) { /* 直したとたん行が消えると迷うので、絞り込みは押し直すまで保つ */ }
       renderOthers();

@@ -63,7 +63,7 @@
     const t0 = performance.now();
     const root = $('#view-list'); root.replaceChildren();
     const bar = el('div', 'list-bar');
-    const search = el('div', 'search-box'); const input = el('input'); input.id = 'list-search'; input.type = 'search'; input.placeholder = '名前・番号で探す（ひらがな・ローマ字も）'; input.setAttribute('aria-label', '商品を探す'); input.value = view.q; search.append(input);
+    const search = el('div', 'search-box'); const input = el('input'); input.id = 'list-search'; input.type = 'search'; input.placeholder = '名前・番号で探す（かな・漢字・ローマ字も）'; input.setAttribute('aria-label', '商品を探す'); input.value = view.q; search.append(input);
     const chips = el('div', 'chips'); chips.id = 'chips'; chips.setAttribute('role', 'group'); chips.setAttribute('aria-label', '絞り込み');
     CHIPS.forEach((c) => { const b = el('button', 'chip'); b.type = 'button'; b.dataset.chip = c; chips.append(b); });
     const sel = el('select'); sel.id = 'list-section'; sel.setAttribute('aria-label', '区分で絞る');
@@ -87,12 +87,13 @@
     chips.addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (b) { view.chip = b.dataset.chip; applyFilter(); scroll.scrollTop = 0; } });
     sel.addEventListener('change', () => { view.sec = sel.value; applyFilter(); scroll.scrollTop = 0; });
     let timer = 0;
-    input.addEventListener('input', () => { window.clearTimeout(timer); const v = input.value; timer = window.setTimeout(() => { view.q = v; view.terms = v.trim() ? (SN ? SN.terms(v) : C.nfkc(v).toLowerCase().split(/\s+/).filter(Boolean)) : null; applyFilter(); scroll.scrollTop = 0; }, 120); });
+    input.addEventListener('input', () => { window.clearTimeout(timer); const v = input.value; timer = window.setTimeout(() => { if (v.trim() && App.ensureWords) App.ensureWords(); view.q = v; view.terms = v.trim() ? (SN ? SN.terms(v) : C.nfkc(v).toLowerCase().split(/\s+/).filter(Boolean)) : null; applyFilter(); scroll.scrollTop = 0; }, 120); });
     applyFilter();
     App.perfNote('見るだけの一覧を作る', t0);
   }
   App.views.reader = {
     show() { if (!state.db) return; if (!view.built) build(); },
-    reset() { view.built = false; view.keys = new Map(); view.q = ''; view.terms = null; view.sec = ''; view.chip = '全部'; }
+    reset() { view.built = false; view.keys = new Map(); view.q = ''; view.terms = null; view.sec = ''; view.chip = '全部'; },
+    wordsChanged() { view.keys = new Map(); if (view.built && view.q && view.q.trim() && SN) { view.terms = SN.terms(view.q); applyFilter(); } }
   };
 })();

@@ -859,7 +859,7 @@
 
   root.SouzaiCore = { TABLES, TABLE_KEYS, KIND_TABLES, KINDS, KIND_PRODUCT, KIND_BLANK, KIND_CONT, KIND_SECTION, FORMS, FORMS_ALL, FORM_REGULAR, FORM_SALE, FORM_NEW, FORM_SALE_NEW, FORM_CUT, FORM_REST, FORM_END, FORM_PLAN, ADDED_MARK, isAddedProduct, normTray, showCell, shownPriceKey, shownPrice, isOffForm, formHas, toggleForm, productForms, freeCalls, isSaleForm, isNewForm, isCutForm, formOf, rowOn, rowRegion, COST_KEYS, GROSS_LOW, GROSS_HIGH, LEVEL_FIX, LEVEL_CHECK, EDITABLE,
     isCutSection, cutSectionOf, formChanges, nextForm, nextMonthTables, nextMonthOf, MONTHLY_COLS, monthlyWanted, monthlySync, monthlyReconcile, splitSmall,
-    MONTHLY_TABLE, MONTHLY_SHEETS, MONTHLY_MARGIN, MIN_NAME_PT, printBox, monthlyPrint, numberPrint,
+    MONTHLY_TABLE, MONTHLY_SHEETS, MONTHLY_MARGIN, MIN_NAME_PT, COL_PX, printBox, monthlyPrint, numberPrint,
     PACK_KIND, PACK_PICTURE, PACK_TITLE, PACK_DEFAULT, PACK_MAX_ROWS, PACK_MAX_PRICE, packProblem, packText, parsePack, packOf,
     isBlank, nfkc, toFull, halfCall, fullDigits, num, evalArith, costFormOk, grossAfter, grossText, parseGross, parseDeco, editRuns, paintRuns, SALE_FONTS, isSaleFont, dropSaleColor, cleanNameDeco, saleRuns, parseQty, setQty, rowsOf, makeDb, setType, blockRoles, blockList, rowValue, secValue, rowRegionOk, rowShown, rowsOfSection, rowsBySection, placesOfBlock, sectionsOfKind, layoutOf, moveSection, moveRow, rowGroup, applyChanges, beforeOf, usedOfKind, capsOfKind, autoPlace, resetToAuto, alertsOf, gapsOf, fieldProblem, hintOf };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

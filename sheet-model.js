@@ -26,6 +26,86 @@
   }
   function style(cell, key, fc, fl) { cell.s = key || null; if (fc !== undefined) cell.fc = fc; if (fl !== undefined) cell.fl = fl; }
 
+  // ------------------------------------------------------------ 2行以上をつないだ名前のセル（PO 2026-11-19「結合＋中央寄せ＋折り返しを利用して大きめに表示がきちんと機能してほしい」）
+  //   縦も横も中央・折り返す・縮小しない・字は「枠に入るいちばん大きな大きさ」（FIT_MAX_PT まで）。見本の絵と Excel は、この同じ書式で描く（分かれない）。
+  //   字の幅は ＭＳ Ｐゴシック を Edge の canvas で測った値（1em の 100 分の 1・36 進の2字ずつ。Excel の AutoFit で測った幅と、字ごとの比が同じ）。
+  //   Excel は、字の大きさを整数の px にして、1字ずつ切り上げた px で並べ、太字は1字 1px 広い（2026-11-19 Excel で写真にして確かめた: 17pt の太字で、canvas の幅では入る 15字めが次の行へ）。
+  //   行の高さ: Excel の折り返しは 16pt で 18.75pt＝1.17em・14pt 1.23em・20pt 1.2em → 1.25em で数える。列の幅は 幅×8px＝core.js の COL_PX
+  const FIT_MAX_PT = 20, FIT_STEP = 0.5, FIT_LINE = 1.25, FIT_PAD_X = 10, FIT_PAD_Y = 3;
+  const FONT_W = [
+    [0x20, '0u0m1e1e1e1e1n0k0u0u1e1e0k1e0k1e1e1e1e1e1e1e1e1e1e1e0k0k1e1e1e191v1r1s1u1t1l1j1w1s0p1i1o1i221s1z1q1z1r1o1n1s1r221o1n1l0y1e0y150u151c1e1e1e1e0u1a1e0l0m1a0l211e1f1e1e0z1a0z1e1c1t1a1c1a0n0n0n15'],
+    [0x3000, '1u1u1u2s2s2s2s2s1e1e1e1e1e1e1e1e1e1e2s2s1e1e2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s000000003h3h2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s2s'],
+    [0x3041, '232m282n1o1z232i282n2s2s2c2i1n2a2n2q282h252g25252o2q2s2s2k2o2k2k2e2i282n2o2i2i252g2i2m2s2s2s2s2s2s2o2o2o2s2s2s2s2s2s2s2s2s2h2s2q2q282c2s2c2q212e28232e2s2c2e2s2s2s2e2o2a2a2a'],
+    [0x30a1, '242i1t2a232m222h292l2a2k2o2o282m2l2o282h2s2s2i2i2i2o2j2q282g252k2j2o212e2k2h2o1t1z2m2j2a2l1z2s2s2s252e2e282g2g2n2n2n2k2n2n2i1v2q202i282q292o1r2129232s2d2e252m2s2s282e2o21262j2o2o2k1e2o'],
+    [0xff01, '2s2s2s2s2s2s2s1e1e2s2s1u2s1u2s1w1w1w1w1w1w1w1w1w1w1e1e2s2s2s2s2s1z2622241z1r25250r1p231r2l25281z2824221q251z2q1t1t1t1e2s1e1e2s1e1l1o1k1o1k0u1m1q0p0p1n0p2m1q1p1p1o121l0y1q1f261g1e1f1e2s1e2s'],
+    [0xff61, '18181818181j1g191c1b1g1g1e181e1s1q1l1r1o1s1k1t1i1q1g1u1n1s1s1j1h1o1o1o1a1s1o1m1t1d1s1g1j1p1s1p191u1f1p1u1s1g1k1f1u1l1k1n1k0p0n']
+  ].map(([from, s]) => ({ from, to: from + s.length / 2 - 1, s }));
+  /** 1字の幅（em・太字を数えない） */
+  function charEm(ch) {
+    const code = ch.codePointAt(0);
+    for (const t of FONT_W) if (code >= t.from && code <= t.to) { const i = (code - t.from) * 2; return parseInt(t.s.slice(i, i + 2), 36) / 100; }
+    return 1;
+  }
+  /** 1字の幅（px）: Excel と同じく、整数の字の大きさで切り上げ・太字は +1px */
+  const charPx = (ch, fontPx, bold) => Math.ceil(charEm(ch) * Math.round(fontPx) - 1e-9) + (bold ? 1 : 0);
+  // 行の頭に来られない字（閉じかっこ・句読点・小書き・のばす棒）＝ブラウザも Excel も、前の字と一緒に次の行へ送る
+  const NO_START = /[、。，．・：；？！ー）〕］｝〉》」』】ゝゞヽヾぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶｧｨｩｪｫｯｬｭｮｰﾞﾟ､｡)]}!?,.:;％%]/;
+  /** 折り返したときの行の数（cap＝1行に使える幅 px・fontPx＝字の大きさ px）。英数字のつながりは空白でしか切らない（長すぎれば字で切る） */
+  function wrapLines(text, cap, fontPx, bold) {
+    let lines = 0;
+    String(text).split('\n').forEach((para) => {
+      lines += 1;
+      const toks = para.match(/[!-~]+| +|[^\s!-~]/gu) || [];
+      let cur = 0, prevW = 0;
+      toks.forEach((tok) => {
+        const w = [...tok].reduce((a, ch) => a + charPx(ch, fontPx, bold), 0);
+        if (/^ +$/.test(tok)) { if (cur > 0) { if (cur + w <= cap) cur += w; else { lines += 1; cur = 0; } } prevW = 0; return; }
+        if (cur + w <= cap) { cur += w; prevW = w; return; }
+        if (w > cap) { [...tok].forEach((ch) => { const cw = charPx(ch, fontPx, bold); if (cur + cw > cap && cur > 0) { lines += 1; cur = 0; } cur += cw; }); prevW = 0; return; }
+        lines += 1;
+        if (NO_START.test(tok) && prevW > 0) cur = prevW + w; else cur = w;
+        prevW = w;
+      });
+    });
+    return lines;
+  }
+  /** 枠（幅 px・高さ px）に入るいちばん大きな字（pt）。入らなければ MIN_NAME_PT */
+  function fitPt(text, boxW, boxH, bold, maxPt) {
+    const min = C.MIN_NAME_PT || 8;
+    for (let pt = Math.max(min, maxPt || FIT_MAX_PT); pt >= min; pt -= FIT_STEP) {
+      const fpx = pt * 4 / 3;
+      const n = wrapLines(text, boxW - FIT_PAD_X, fpx, bold);
+      if (n * Math.round(fpx) * FIT_LINE <= boxH - FIT_PAD_Y) return pt;
+    }
+    return min;
+  }
+  /** つないだ名前のセルの書式（元の書式の写し＋縦横の中央・折り返し・縮小なし・字の大きさ）。鍵は「元の鍵~fit大きさ」（表の型の書式に足すだけ・上書きしない） */
+  function fitStyleKey(styles, key, pt) {
+    const k = (key || '') + '~fit' + pt;
+    if (!styles[k]) styles[k] = Object.assign({}, styles[key] || {}, { '書式キー': k, '大きさ': pt, '横の位置': 'center', '縦の位置': 'center', '折り返し': '○', '縮小して全体を表示': '' });
+    return k;
+  }
+  /** シートの、2行以上をつないだ名前のセルを、枠に合わせる（行の高さが決まった後に呼ぶ） */
+  function fitMergedNames(sheet, merges) {
+    const styles = sheet._db.type.styles; const colPx = C.COL_PX || 8;
+    const widthOf = new Map(sheet.cols.map((c) => [c.c, c.w === null ? 8.43 : c.w]));
+    const hidden = new Set(sheet.hiddenRows || []); const defH = Number(sheet.page && sheet.page.defaultRowHeight) || 15;
+    sheet.fitted = [];
+    merges.forEach((m) => {
+      const cell = sheet.grid.get(m.r1, m.c); if (!cell || (cell.v === undefined && cell.f === undefined)) return;
+      const text = String(cell.v === undefined ? '' : cell.v); if (!text.trim()) return;
+      let w = 0; for (let c = m.c; c <= m.c2; c++) w += Math.round((widthOf.has(c) ? widthOf.get(c) : 8.43) * colPx);
+      let h = 0; for (let r = m.r1; r <= m.r2; r++) if (!hidden.has(r)) h += (sheet.rowHeights[r] !== undefined ? sheet.rowHeights[r] : defH) * 4 / 3;
+      const base = styles[cell.s] || {};
+      const bold = base['太字'] === '○' || (cell.runs || []).some((r) => r[2] && r[2].b);
+      const pt = fitPt(text, w, h, bold);
+      const basePt = Number(base['大きさ']) || 11;
+      cell.s = fitStyleKey(styles, cell.s, pt);
+      if (cell.runs) cell.runs = cell.runs.map((r) => { const p = r[2] || {}; return p.s ? [r[0], r[1], Object.assign({}, p, { s: Math.max(1, Math.round(p.s * pt / basePt * 2) / 2) })] : r; });
+      sheet.fitted.push({ r: m.r1, c: m.c, pt, w, h: Math.round(h) });
+    });
+  }
+
   /** 表の型に高さの無い行（上限の行数を増やした行・型より多い月間の行）に、既定の行の高さを書く。
    *  書かないと Excel は字の大きさで高さを決め（16pt の字で約 24pt）、見本の絵と印刷の見立て（core.js の printBox）とずれる */
   function fillRowHeights(sheet, sh) {
@@ -128,6 +208,7 @@
     const colsByNo = {};
     sheet.cols.forEach((c) => { colsByNo[c.c] = c.raw; });
     const lay = C.layoutOf(db, table, memo);
+    const nameMerges = [];
     const saleFont = sh['月間特売の字の色'] || 'FF00FF';
     const newFill = sh['新商品の塗り'] || '';
     let lastRow = Number(sh['本文の最後の行']);
@@ -178,7 +259,10 @@
           } else {
             kinds[r] = { k: 'blank', row };
           }
-          if (row['つなぐ'] === '○' && r > start) sheet.merges.push(roles['名前']['列'] + (r - 1) + ':' + roles['名前']['列'] + r);
+          if (row['つなぐ'] === '○' && r > start) { // 名前のセルを上の行とつなぐ（3行以上は1つのつなぎに伸ばす＝重なったつなぎを作らない）
+            const last = nameMerges[nameMerges.length - 1];
+            if (last && last.c === nameCol && last.r2 === r - 1) last.r2 = r; else nameMerges.push({ r1: r - 1, r2: r, c: nameCol, c2: nameCol, L: roles['名前']['列'] });
+          }
           metaRows.push({ r, kind: kind === C.KIND_PRODUCT ? 'product' : (kind === C.KIND_CONT ? 'cont' : 'blank'), secId, rowId: String(row['行ID']), pid: row['商品ID'] ? String(row['商品ID']) : '' });
           r += 1;
         });
@@ -232,6 +316,8 @@
     fillRowHeights(sheet, sh);
     const print = C.numberPrint(db, table, null, lay);
     sheet.page = pageOf(sh, lastRow, print);
+    nameMerges.forEach((m) => sheet.merges.push(m.L + m.r1 + ':' + m.L + m.r2));
+    fitMergedNames(sheet, nameMerges);
     sheet.meta.print = print;
     sheet.layout = lay;
     return sheet;
@@ -329,5 +415,5 @@
     return { scale: r.scale, namePt: r.namePt, ok: r.ok, byWidth: r.byWidth, rows: r.lastRow, squeezed: 0, drop: 0 };
   }
 
-  root.SouzaiSheet = { buildBook, buildOne, estimateScale, letterToCol, colToLetter, parseOverrides };
+  root.SouzaiSheet = { buildBook, buildOne, estimateScale, letterToCol, colToLetter, parseOverrides, fitPt, wrapLines, charEm, FIT_MAX_PT };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

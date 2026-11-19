@@ -3,7 +3,14 @@
   // 記録のタブ（だれが・いつ・何を。前の値に戻す）と、設定（本部と PO: パックの値段／PO だけ: 上限の行数の3段・A4 の見立て・月を消す）。
   const App = window.SouzaiApp;
   const { state, $, el, C, toast } = App;
-  const log = { rows: [], q: '', loaded: false };
+  const SN = App.SN || null;
+  const log = { rows: [], q: '', loaded: false, keys: new WeakMap() };
+  /** 記録の1行の探す鍵（名前・人・欄・操作・対象）。読み込み直すか読みの表が替わるまで覚える */
+  function logKey(x) {
+    let k = log.keys.get(x); if (k !== undefined) return k;
+    const t = [x['対象の名前'], x['メール'], x['欄'], x['操作'], x['対象']].filter((v) => v !== '' && v !== null && v !== undefined).join(' ');
+    k = SN ? SN.key(t) : C.nfkc(t).toLowerCase(); log.keys.set(x, k); return k;
+  }
   const when = (v) => String(v ?? '').replace('T', ' ').slice(0, 16);
   const canRevert = (x) => x['欄'] && !x.masked && ['商品', '原価', '行', '月間', '置き場'].includes(x['種類']) && C.EDITABLE[x['種類']] && C.EDITABLE[x['種類']].includes(x['欄']);
   function renderLog() {
@@ -14,14 +21,16 @@
     bar.append(input, again, el('span', 'hint-line', 'だれが・いつ・何を変えたか。原価の値は、原価を表示している人にだけ出ます。'));
     root.append(bar);
     const wrap = el('div'); wrap.id = 'log-table-wrap'; root.append(wrap);
-    input.addEventListener('input', () => { log.q = input.value; paintLogTable(); });
+    input.addEventListener('input', () => { const t0 = performance.now(); log.q = input.value; paintLogTable(); App.perfNote('記録で探す', t0); }); // 記録は 200 行まで・鍵は覚えておく＝待たずに絞る
     paintLogTable();
     root.append(perfDetails());
   }
   function paintLogTable() {
     const wrap = $('#log-table-wrap'); if (!wrap) return; wrap.replaceChildren();
-    const q = C.nfkc(log.q).toLowerCase().trim();
-    const rows = log.rows.filter((x) => !q || C.nfkc([x['対象の名前'], x['メール'], x['欄'], x['操作']].join(' ')).toLowerCase().includes(q));
+    const q = log.q.trim();
+    if (q && App.ensureWords) App.ensureWords();
+    const terms = q ? (SN ? SN.terms(q) : C.nfkc(q).toLowerCase().split(/\s+/).filter(Boolean)) : null;
+    const rows = log.rows.filter((x) => !terms || !terms.length || (SN ? SN.hit(logKey(x), terms) : terms.every((w) => logKey(x).includes(w))));
     if (!rows.length) { wrap.append(el('p', 'hint-line', log.loaded ? '記録はまだありません。' : '読んでいます…')); return; }
     const t = el('table', 'data-table'); t.id = 'log-table';
     const head = el('thead'); const hr = el('tr'); ['いつ', 'だれ', '操作', '何を', '欄', '前の値', '後の値', ''].forEach((h) => hr.append(el('th', '', h))); head.append(hr); t.append(head);
@@ -47,7 +56,7 @@
   async function loadLog(button) {
     const done = button ? App.busyButton(button, '読んでいます…') : () => {};
     const t0 = performance.now();
-    try { const data = await App.api('getHistory', { limit: 200, withCosts: state.showCosts }); log.rows = data.rows || []; log.loaded = true; paintLogTable(); App.perfNote('記録を開く', t0); }
+    try { const data = await App.api('getHistory', { limit: 200, withCosts: state.showCosts }); log.rows = data.rows || []; log.keys = new WeakMap(); log.loaded = true; paintLogTable(); App.perfNote('記録を開く', t0); }
     catch (error) { if (error.code === 'SESSION') App.showLogin(error.message); else toast('記録を読めませんでした: ' + error.message, true); log.loaded = true; }
     finally { done(); }
   }
@@ -65,7 +74,8 @@
   }
   App.views.log = {
     show() { renderLog(); loadLog(); },
-    reset() { log.rows = []; log.loaded = false; }
+    reset() { log.rows = []; log.loaded = false; log.keys = new WeakMap(); },
+    wordsChanged() { log.keys = new WeakMap(); if (log.q && $('#log-table-wrap')) paintLogTable(); }
   };
 
   // ------------------------------------------------------------ 設定（パックの値段は本部と PO・ほかは PO だけ）。画面で隠すだけでなく、窓口が役割で通す

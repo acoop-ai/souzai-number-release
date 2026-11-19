@@ -76,9 +76,9 @@
 .gui-who { display: inline-block; background: var(--brand-soft); border: 1px solid var(--brand); color: var(--brand); border-radius: 999px; padding: 3px 14px; font-weight: 700; }
 
 /* 販売形態と色の見本（一覧の行は styles.css の .lr.f-* の色をそのまま使う。番号表・Excel の色は表の型の「月間特売の字の色」「新商品の塗り」と同じ） */
-.gforms-wrap { overflow-x: auto; }
+.gforms-wrap { overflow: visible; } /* 横に送る枠にしない（枠にすると見出しが本文を送っても残らない）。表は幅に収まる作り（狭い幅は1列めを折り返す） */
 .gforms { border-collapse: collapse; font-size: 15px; min-width: 100%; }
-.gforms th { text-align: left; background: #e5e7eb; padding: 6px 10px; font-size: 14px; white-space: nowrap; }
+.gforms th { text-align: left; background: #e5e7eb; padding: 6px 10px; font-size: 14px; white-space: nowrap; position: sticky; top: var(--gtoc-h, 0px); z-index: 2; } /* 見出しは送っても残る（狭い幅は上に残る目次の帯の下＝guide.js が帯の高さを測って --gtoc-h に入れる） */
 .gforms td { border-top: 1px solid var(--line); padding: 6px 10px; vertical-align: middle; }
 .gforms td:first-child { white-space: nowrap; }
 .gforms td:first-child .chip + .chip { margin-left: 4px; }

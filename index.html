@@ -8,28 +8,29 @@
   <meta name="referrer" content="no-referrer">
   <title>商品呼出番号表</title>
   <meta name="application-name" content="商品呼出番号表">
-  <script src="oauth-return.js?v=0.2.4"></script>
-  <link rel="stylesheet" href="styles.css?v=0.2.4">
-  <script src="config.js?v=0.2.4" defer></script>
-  <script src="login.js?v=0.2.4" defer></script>
-  <script src="search-norm.js?v=0.2.4" defer></script>
-  <script src="core.js?v=0.2.4" defer></script>
-  <script src="pack-picture.js?v=0.2.4" defer></script>
-  <script src="sheet-model.js?v=0.2.4" defer></script>
-  <script src="xlsx-write.js?v=0.2.4" defer></script>
-  <script src="app.js?v=0.2.4" defer></script>
-  <script src="view-list.js?v=0.2.4" defer></script>
-  <script src="view-reader.js?v=0.2.4" defer></script>
-  <script src="view-sheet.js?v=0.2.4" defer></script>
-  <script src="view-more.js?v=0.2.4" defer></script>
-  <script src="import-merge.js?v=0.2.4" defer></script>
-  <script src="import-summary.js?v=0.2.4" defer></script>
-  <script src="view-month.js?v=0.2.4" defer></script>
+  <script src="oauth-return.js?v=0.2.6"></script>
+  <link rel="stylesheet" href="styles.css?v=0.2.6">
+  <script src="config.js?v=0.2.6" defer></script>
+  <script src="login.js?v=0.2.6" defer></script>
+  <script src="search-norm.js?v=0.2.6" defer></script>
+  <script src="core.js?v=0.2.6" defer></script>
+  <script src="pack-picture.js?v=0.2.6" defer></script>
+  <script src="sheet-model.js?v=0.2.6" defer></script>
+  <script src="xlsx-write.js?v=0.2.6" defer></script>
+  <script src="app.js?v=0.2.6" defer></script>
+  <script src="view-list.js?v=0.2.6" defer></script>
+  <script src="view-reader.js?v=0.2.6" defer></script>
+  <script src="view-sheet.js?v=0.2.6" defer></script>
+  <script src="view-more.js?v=0.2.6" defer></script>
+  <script src="import-merge.js?v=0.2.6" defer></script>
+  <script src="import-summary.js?v=0.2.6" defer></script>
+  <script src="view-month.js?v=0.2.6" defer></script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
   <header class="topbar" id="topbar">
     <div class="tb-left">
+      <nav class="nav-fixed" aria-label="戻る・TOP"><button id="nav-back" class="nav-btn" type="button" title="ひとつ前に見ていた画面（表）へ戻る" aria-label="ひとつ前に戻る" disabled>← 戻る</button><button id="nav-top" class="nav-btn" type="button" title="いま見ている画面のいちばん上へ" aria-label="TOP（いちばん上へ）">↑ TOP</button></nav>
       <a class="brand" href="#main" id="brand"><strong>商品呼出番号表</strong></a>
       <div class="month-nav" id="month-nav" role="group" aria-label="月を選ぶ" hidden>
         <button id="month-prev" class="btn-icon" type="button" aria-label="前の月へ">◀</button>
@@ -50,7 +51,7 @@
       <span id="save-state" class="save-state" role="status" aria-live="polite">✓ 自動保存</span>
       <span class="undo-group" id="undo-group" role="group" aria-label="元に戻す・やり直す"><button id="undo-btn" class="btn btn-small btn-icon" type="button" disabled title="元に戻す物はまだありません" aria-label="元に戻す">↶</button><button id="redo-btn" class="btn btn-small btn-icon" type="button" disabled title="やり直す物はありません" aria-label="やり直す">↷</button></span>
       <button id="excel-button" class="btn" type="button">Excel</button>
-      <a class="btn" href="guide.html" id="guide-link">ガイド</a>
+      <a class="btn" href="guide.html" id="guide-link">？ 利用ガイド</a>
       <div class="menu-wrap">
         <button id="account-button" class="btn btn-quiet" type="button" aria-haspopup="true" aria-expanded="false" aria-label="アカウント"><span id="account-label">未ログイン</span> ▾</button>
         <div id="account-menu" class="pop-menu pop-right" hidden>

@@ -1,5 +1,5 @@
 'use strict';
-// ご利用ガイド。言葉（本文）はログインの後に窓口から受け取る（公開の画面に本文を置かない）。図は画面の側に置き、窓口は節ごとに図の名前だけを返す。
+// 商品呼出番号表利用ガイド。← 戻る＝来た画面へ（この画面から開いたら履歴で・ほかは番号表の画面）・↑ TOP＝本文のいちばん上（上の帯の左の端・いつも見える）。言葉（本文）はログインの後に窓口から受け取る（公開の画面に本文を置かない）。図は画面の側に置き、窓口は節ごとに図の名前だけを返す。
 //   節 = { id, title, fig: 図の名前, steps: [{ h: 見出し, t: 補い }]（図の番号の丸 ①②… の説明・順番が番号）, items: [短い文] }
 //   図の名前は、下の FIGS（図解）と guide-img/figs.js（写真と丸の位置・tests/guide_shots.js が作る）にある物だけを出す。無い名前は図なしで言葉だけ出す。
 //   図解は styles.css の部品（札・行の色・保存の印・ボタン）をそのまま使う＝色と名前は画面と同じ。窓口の文字は全部 textContent（HTML として入れない）。
@@ -14,6 +14,9 @@
   const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x !== undefined && x !== null) n.textContent = String(x); return n; };
   const status = document.getElementById('guide-status');
   const scroller = document.getElementById('guide-scroll');
+  // ← 戻る: この番号表の画面から開いたなら履歴で戻る（開いていた画面・タブのまま）。ほかから直接開いたなら番号表の画面へ（リンクのまま）。↑ TOP: 本文のいちばん上へ
+  document.getElementById('nav-back').addEventListener('click', (e) => { let same = false; try { same = document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1; } catch { same = false; } if (same) { e.preventDefault(); history.back(); } });
+  document.getElementById('nav-top').addEventListener('click', () => { scroller.scrollTop = 0; });
 
   // ------------------------------------------------------------ 図解（写真でない図）。見本の字は画面の部品の名前と同じにする
   // 販売形態ごとの色: [販売形態, 一覧の行の印（styles.css の .lr.f-*）, 一覧の色の名前, 番号表・Excel の見本（ink＝ピンクの字・fill＝水色のセル・cut・off）, 番号表・Excel の説明]
@@ -209,8 +212,11 @@
       if (items.length) { const ul = el('ul', 'gnotes'); items.forEach((t) => ul.append(el('li', '', t))); sec.append(ul); }
       box.append(sec);
     });
-    status.hidden = true; document.getElementById('guide-root').hidden = false; spy();
+    status.hidden = true; document.getElementById('guide-root').hidden = false; spy(); setTocGap();
   }
+  // 表の見出しを、上に残る目次の帯（狭い幅）の下に残す（帯の高さは決め打ちせず測る）
+  function setTocGap() { document.documentElement.style.setProperty('--gtoc-h', topGap() + 'px'); }
+  window.addEventListener('resize', setTocGap, { passive: true });
   function session() { try { const o = JSON.parse(localStorage.getItem('souzai-number-session-v1') || 'null'); return o && o.t && Date.now() < o.e ? o.t : ''; } catch { return ''; } }
   function askLogin(msg) { status.replaceChildren(document.createTextNode(msg + ' '), Object.assign(el('a', '', '画面でログインする'), { href: 'index.html' })); }
   async function start() {

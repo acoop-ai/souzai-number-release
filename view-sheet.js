@@ -8,7 +8,7 @@
   const isMonthly = (t) => C.MONTHLY_SHEETS.indexOf(t) >= 0;
   const view = { built: false, table: '首都圏', zoom: 'fit', sheet: null, cells: new Map(), dirty: true, merged: '', movePanel: false, drag: null, pick: null, lastRows: 0 };
   const db = () => state.db;
-  const colPx = (w) => Math.round((w === null || w === undefined ? 8.43 : Number(w)) * 7 + 5);
+  const colPx = (w) => Math.round((w === null || w === undefined ? 8.43 : Number(w)) * (C.COL_PX || 8)); // Excel と同じ幅（標準の字 ＭＳ Ｐゴシック 11pt＝1字 8px。前は Calibri の 7px＋5 で、Excel より 1割ほど狭かった）
   const BORDER = { thin: '1px solid #000', hair: '1px dotted #666', medium: '2px solid #000', thick: '3px solid #000', double: '3px double #000', dotted: '1px dotted #000', dashed: '1px dashed #000' };
   // 書式は組み合わせごとに1つのクラスにして共有する（セルごとに書かない＝描くのが速い）。CSP に触れない形（画面の中で作る表）
   const cssMemo = new Map();
@@ -29,9 +29,10 @@
     [['罫線（左）', 'left'], ['罫線（右）', 'right'], ['罫線（上）', 'top'], ['罫線（下）', 'bottom']].forEach(([cn, side]) => { if (BORDER[st[cn]]) rule.push('border-' + side + ':' + BORDER[st[cn]]); });
     if (st['横の位置']) rule.push('text-align:' + safe(st['横の位置']));
     rule.push('vertical-align:' + (st['縦の位置'] === 'center' ? 'middle' : (st['縦の位置'] ? safe(st['縦の位置']) : 'bottom')));
-    if (st['折り返し'] === '○') rule.push('white-space:normal');
+    if (st['折り返し'] === '○') rule.push('white-space:pre-wrap', 'overflow-wrap:anywhere', 'line-height:1.2'); // Excel と同じ: 名前の中の改行で行を替える・入らなければ折り返す
     sheetCss.insertRule('.sheet-grid td.' + name + '{' + rule.join(';') + '}', sheetCss.cssRules.length);
-    const out = { name, shrink: st['縮小して全体を表示'] === '○', fontPx: st['大きさ'] ? Number(st['大きさ']) * 1.333 : 14.7, fmt: st['表示形式'] || 'General' };
+    // 縮小は、折り返しの無いセルだけ（Excel は両方に印があると折り返しを使い、縮小しない。前は1行に縮めて 9px ほどの字になっていた＝PO 2026-11-19 うどんセット）
+    const out = { name, shrink: st['縮小して全体を表示'] === '○' && st['折り返し'] !== '○', fontPx: st['大きさ'] ? Number(st['大きさ']) * 1.333 : 14.7, fmt: st['表示形式'] || 'General' };
     cssMemo.set(k, out); return out;
   }
   function textOf(cell, fmt) {
@@ -255,8 +256,8 @@
   }
   // ------------------------------------------------------------ 番号表で探す（名前・番号。ひらがな・カタカナ・ローマ字でも＝一覧と同じ部品 SN）
   //   当たったセルを光らせ、Enter で次へ（Shift+Enter で前へ）。ほかの表の当たりの数はタブに出す。店は一覧が無いので、ここが探す所
-  const find = { q: '', terms: null, hits: [], at: -1, cache: new Map(), timer: 0 };
-  const findKey = (t) => (SN ? SN.key(t) : C.nfkc(t).toLowerCase());
+  const find = { q: '', terms: null, hits: [], at: -1, cache: new Map(), keyMemo: new Map(), timer: 0, countGen: 0 }; // keyMemo＝セルの字ごとの探す鍵（打つたびに作り直さない・読みの表が替われば捨てる）
+  const findKey = (t) => { let k = find.keyMemo.get(t); if (k === undefined) { k = SN ? SN.key(t) : C.nfkc(t).toLowerCase(); if (find.keyMemo.size > 20000) find.keyMemo.clear(); find.keyMemo.set(t, k); } return k; };
   const findHit = (k) => (SN ? SN.hit(k, find.terms) : find.terms.every((x) => k.includes(x)));
   function findBox() {
     const box = el('div', 'sheet-find'); box.setAttribute('role', 'search');
@@ -284,6 +285,7 @@
   }
   function runFind(jump) {
     const t0 = performance.now();
+    if (find.q.trim() && App.ensureWords) App.ensureWords(); // 探す前に読みの表を読み切る（はじめの1回だけ）
     find.terms = find.q.trim() ? (SN ? SN.terms(find.q) : C.nfkc(find.q).toLowerCase().split(/\s+/).filter(Boolean)) : null;
     if (find.terms && !find.terms.length) find.terms = null;
     document.querySelectorAll('#sheet-scroll td.is-hit').forEach((td) => td.classList.remove('is-hit', 'is-hit-now'));
@@ -295,13 +297,23 @@
     }
     if (find.at >= find.hits.length) find.at = find.hits.length - 1;
     if (find.hits.length && find.at < 0) find.at = 0;
-    showHit(jump);
+    // ほかの表の当たりの数（タブの横）。字を集め終えた表はすぐ数え、まだの表（はじめの1回だけ重い）は、いまの表の当たりを出したあと手が空いたときに1枚ずつ（0.2.6）
+    const gen = ++find.countGen;
+    const paintCount = (b, n) => { const tag = b.querySelector('.tab-hits'); if (tag) tag.textContent = n ? String(n) : ''; b.classList.toggle('has-hits', n > 0); };
+    const later = [];
     document.querySelectorAll('.sheet-tabs button').forEach((b) => {
-      const n = !find.terms ? 0 : (b.dataset.tab === view.table ? find.hits.length : keysOf(b.dataset.tab).filter((k) => findHit(k)).length);
-      const tag = b.querySelector('.tab-hits'); if (tag) tag.textContent = n ? String(n) : '';
-      b.classList.toggle('has-hits', n > 0);
+      if (!find.terms) paintCount(b, 0);
+      else if (b.dataset.tab === view.table) paintCount(b, find.hits.length);
+      else if (find.cache.has(b.dataset.tab)) paintCount(b, keysOf(b.dataset.tab).filter((k) => findHit(k)).length);
+      else later.push(b);
     });
+    showHit(jump);
     if (find.terms) App.perfNote('番号表で探す', t0);
+    if (later.length) {
+      const idle = (fn) => (window.requestIdleCallback ? window.requestIdleCallback(fn) : window.setTimeout(fn, 16));
+      const next = () => { if (gen !== find.countGen || !find.terms) return; const b = later.shift(); paintCount(b, keysOf(b.dataset.tab).filter((k) => findHit(k)).length); if (later.length) idle(next); else showHit(false); };
+      idle(next);
+    }
   }
   function showHit(jump) {
     const count = $('#find-count');
@@ -335,6 +347,7 @@
   window.addEventListener('resize', () => { if (state.view === 'sheet') applyZoom(); });
 
   function openTable(t) {
+    if (t !== view.table && view.built && state.view === 'sheet' && App.notePlace) App.notePlace({ view: 'sheet', table: view.table }); // ← 戻るで、前の表へ
     view.table = t;
     document.querySelectorAll('.sheet-tabs button').forEach((b) => { const on = b.dataset.tab === t; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', String(on)); });
     if (view.built && state.view === 'sheet') { find.at = 0; render(); $('#sheet-scroll').scrollTop = 0; renderMovePanel(); if (find.q) showHit(true); }
@@ -473,6 +486,7 @@
   function candidates(q) {
     const kind = kindNow(); if (!kind) return [];
     const out = [];
+    if (q.trim() && App.ensureWords) App.ensureWords();
     const terms = q.trim() ? (SN ? SN.terms(q) : C.nfkc(q).toLowerCase().split(/\s+/).filter(Boolean)) : null;
     const hit = (t) => { if (!terms) return true; const k = SN ? SN.key(t) : C.nfkc(t).toLowerCase(); return SN ? SN.hit(k, terms) : terms.every((x) => k.includes(x)); };
     C.sectionsOfKind(db(), kind).forEach((s) => { if (hit(String(s['表題']))) out.push({ kind: 'sec', id: String(s['区分ID']), label: '［区分］' + C.nfkc(s['表題']) }); });
@@ -555,6 +569,8 @@
   }
 
   App.views.sheet = {
+    tableNow() { return view.table; },
+    openTableFromNav(t) { if (TABS.indexOf(t) >= 0) openTable(t); },
     show() {
       if (!state.db) return;
       if (!view.built) { buildFrame(); view.dirty = true; }
@@ -568,6 +584,7 @@
       window.requestAnimationFrame(() => window.setTimeout(() => { if (state.db && state.view === 'sheet') render(); else view.dirty = true; }, 0));
     },
     reset() { view.built = false; view.dirty = true; view.merged = ''; view.cells = new Map(); view.pick = null; view.movePanel = false; cssMemo.clear(); sheetCss.replaceSync(''); if (view.drag) endDrag(); },
+    wordsChanged() { find.cache.clear(); find.keyMemo.clear(); if (view.built && find.q && find.q.trim()) runFind(false); if (view.movePanel && view.moveQ) renderMovePanel(); },
     markDirty() { view.dirty = true; if (state.view === 'sheet' && view.built && !view.drag) render(); },
     openTable
   };

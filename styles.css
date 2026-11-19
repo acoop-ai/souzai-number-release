@@ -16,26 +16,32 @@ button:disabled { cursor: default; }
 [hidden] { display: none !important; }
 
 /* 上の帯 */
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 12px; background: var(--brand); color: var(--brand-ink); flex: none; }
-.tb-left, .tb-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 12px; background: var(--brand); color: var(--brand-ink); flex: none; position: sticky; top: 0; z-index: 40; } /* 上の帯は送っても上に残る（← 戻る・↑ TOP・？ 利用ガイドがいつも押せる） */
+.tb-left, .tb-right { display: flex; align-items: center; gap: 7px; min-width: 0; } /* 0.2.6: ← 戻る・↑ TOP を足しても 1366 の幅で1行（間を 10→7px・タブの左右 13→9px・月の字の幅 6.4→5.8em・保存の印 6.8→6.2em） */
 .brand { color: inherit; text-decoration: none; font-size: 17px; white-space: nowrap; }
+/* ← 戻る・↑ TOP: 上の帯の左の端（帯と一緒にいつも見える・PO 2026-11-18「ヘッダと同じように固定」） */
+.nav-fixed { display: inline-flex; gap: 4px; flex: none; }
+.nav-btn { display: inline-flex; align-items: center; min-height: 30px; padding: 2px 7px; border: 1px solid rgba(255, 255, 255, .55); border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; font-weight: 700; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.nav-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .2); }
+.nav-btn:disabled { opacity: .45; cursor: default; }
 .month-nav { display: flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, .14); border-radius: 8px; padding: 2px 4px; }
-.month-nav strong { font-size: 16px; white-space: nowrap; min-width: 6.4em; text-align: center; }
+.month-nav strong { font-size: 16px; white-space: nowrap; min-width: 5.8em; text-align: center; }
 .btn-icon { background: none; border: 0; color: inherit; width: 30px; height: 30px; border-radius: 6px; }
 .btn-icon:hover:not(:disabled) { background: rgba(255, 255, 255, .2); }
 .btn-icon:disabled { opacity: .4; }
 .view-tabs { display: flex; gap: 2px; }
-.view-tabs button { background: none; border: 0; color: inherit; padding: 5px 13px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
+.view-tabs button { background: none; border: 0; color: inherit; padding: 5px 9px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
 .view-tabs button:hover { background: rgba(255, 255, 255, .18); }
 .view-tabs button.is-active { background: #fff; color: var(--brand); }
 .alert-chip { background: var(--alert); color: #5c4a00; border: 1px solid #e0cf73; border-radius: 999px; padding: 3px 12px; font-weight: 700; white-space: nowrap; }
 .alert-chip.is-zero { background: #dcfce7; color: var(--ok); border-color: #86efac; }
-.save-state { white-space: nowrap; font-size: 14px; min-width: 6.8em; }
+.save-state { white-space: nowrap; font-size: 14px; min-width: 6.2em; }
 /* 元に戻す・やり直す（どの直しも・何回でも。PO 2026-11-07）。保存の印のすぐ右に、文字の幅で */
 .undo-group { display: inline-flex; gap: 4px; }
 .undo-group .btn-icon { min-width: 34px; justify-content: center; padding: 2px 8px; font-size: 17px; font-weight: 700; line-height: 1; } /* 帯を1行に収める（1366 の幅で）。名前と次に戻す中身はマウスを置くと出る・ガイドの地図にも */
 .undo-group .btn:disabled { opacity: .55; cursor: default; }
 tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
+.detail .is-changed { animation: undo-flash 1.6s ease-out; } /* 1商品の入力: 戻った（変わった）欄を光らせる */
 @keyframes undo-flash { 0% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, .55); } 100% { box-shadow: inset 0 0 0 999px rgba(250, 204, 21, 0); } }
 .save-state.is-error { background: #fee2e2; color: var(--red); border-radius: 6px; padding: 1px 8px; font-weight: 700; }
 .btn { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: var(--ink); border: 1px solid var(--line2); border-radius: 7px; padding: 4px 11px; text-decoration: none; white-space: nowrap; min-height: 32px; }
@@ -122,7 +128,19 @@ tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
 .list-table tbody tr.lr { content-visibility: auto; contain-intrinsic-size: auto 32px; }
 .list-table th, .list-table td { flex: 0 0 auto; box-sizing: border-box; display: flex; align-items: center; }
 .list-table .c-call { width: 68px; } .list-table .c-name { flex: 1 0 200px; width: 0; } .list-table .c-form { width: 150px; } .list-table .c-price, .list-table .c-sale { width: 82px; } .list-table .c-cost { width: 86px; } .list-table .c-gross { width: 70px; } .list-table .c-cost.c-after { width: 124px; } .list-table .c-small { width: 120px; } .list-table .c-tray, .list-table .c-tray-text { width: 190px; } .list-table .c-sec { width: 180px; } .list-table .c-rprice { width: 110px; }
-.list-table tr.notice-row td, .list-table tr.detail-row td, .list-table tr.new-row td { flex: 1 1 100%; width: 100%; display: block; }
+.list-table tr.notice-row td, .list-table tr.detail-row td, .list-table tr.new-row td, .list-table tr.gap-row td { flex: 1 1 100%; width: 100%; display: block; }
+/* 番号順のときの「空いている番号」の行（番号の間に細く・行の色と分ける）。並び（番号表の順・番号順・名前順）の切り替え */
+.list-table tr.gap-row td { height: auto; padding: 2px 8px 2px 74px; background: #f5f3ff; color: #4c1d95; font-size: 13px; white-space: normal; border-bottom: 1px dashed #c4b5fd; }
+.gap-label { font-weight: 700; margin-right: 8px; }
+.gap-nums { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+/* 見出しの「番号」「名前」を押すと並ぶ（Excel と同じ）。並んでいる見出しは色の面と ↓ */
+.th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; width: 100%; height: 100%; font-weight: 700; }
+.th-sort .sort-mark { font-size: 12px; color: var(--ink2); }
+.th-sort:hover .sort-mark, .th-sort:focus-visible .sort-mark { color: var(--brand); }
+.th-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.list-table th.is-sorted { background: var(--brand-soft); }
+.list-table th.is-sorted .sort-mark { color: var(--brand); font-weight: 700; }
+
 .list-table th { background: #e5e7eb; border-bottom: 2px solid var(--line2); border-right: 1px solid var(--line); padding: 4px 6px; text-align: left; font-size: 13.5px; white-space: nowrap; }
 .list-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; height: 32px; min-width: 0; background: var(--row, #fff); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .list-table th.c-call, .list-table td.c-call { position: sticky; left: 0; z-index: 3; }
@@ -304,6 +322,7 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 .pack-edit { border-collapse: collapse; }
 .pack-edit th { font-size: 13.5px; font-weight: 700; color: var(--ink2); padding: 2px 6px; text-align: center; white-space: nowrap; }
 .pack-edit tbody th { text-align: left; }
+.pack-edit tbody th, .pack-edit thead th:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel, #fff); } /* 狭い幅で横に送っても、左の列（何段め）が残る（0.2.6） */
 .pack-edit td { padding: 3px 4px; white-space: nowrap; }
 .pack-edit input { width: 5.5em; height: 36px; font-size: 16px; text-align: right; padding: 2px 8px; border: 1px solid var(--line2); border-radius: 7px; background: #fff; }
 .pack-edit input.is-bad { border-color: var(--red); background: #fff5f5; }
@@ -391,3 +410,14 @@ details.perf { margin-top: 16px; font-size: 13.5px; }
   .month-panel { left: 4px; right: 4px; padding: 10px; }
 }
 @media print { .topbar, .list-bar, .list-hint, .toast { display: none !important; } body { height: auto; overflow: visible; } }
+/* 0.2.6: 幅 1500px まで（1366 のノート PC）は上の帯の字を少し小さく・詰めて、← 戻る・↑ TOP・？ 利用ガイドを足しても1行に（保存の時刻が付いても）。1920 はそのまま */
+@media (min-width: 761px) and (max-width: 1500px) {
+  .topbar { font-size: 13.5px; padding: 6px 10px; gap: 8px; }
+  .topbar .brand { font-size: 15.5px; }
+  .topbar .month-nav strong { font-size: 15px; }
+  .topbar .view-tabs button { padding: 4px 7px; }
+  .topbar .btn { padding: 4px 8px; }
+  .topbar .nav-btn { font-size: 12.5px; padding: 2px 6px; }
+  .topbar .save-state { font-size: 13px; }
+  .topbar .alert-chip { padding: 3px 9px; }
+}
