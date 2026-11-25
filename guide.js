@@ -194,17 +194,29 @@
     toc.replaceChildren(); document.getElementById('guide-content').replaceChildren(); pinned = ''; scroller.scrollTop = 0;
     render(g);
   }
+  // 待つ間のハチの絵（0.2.7）: 画面の部品（mitsubachi.js）の説明と選ぶ所。本文の原本は窓口だが、この節は公開の画面にある部品そのものの説明（内部の手順は無い）なので、
+  //   窓口を貼り直さずに画面の側に置く（次に窓口を直す版で getGuide_ へ移す）。部品が読めない端末では節ごと出さない
+  const MB = window.Mitsubachi || null;
+  const BEE_SECTION = { id: 'bee', title: '待つ間のハチの絵', items: [
+    '0.3 秒より長く待つときと、つながらないときに、字の横にハチが出ます（短い待ちには出ません）。',
+    '絵は「もふ」と「むぎわら」から選べます（はじめは もふ）。右上のメニュー（▾）でも選べます。',
+    '選んだ絵は、この PC に覚えます。店の PC はみんなで使うので、選ぶと、その PC を使う人みんなの絵が替わります。',
+    '端末の「動きを減らす」がオンなら、止まった絵で出ます。'
+  ] };
+  function beeFig() { const box = el('div', 'gbee'); MB.picker(box, { label: '待つ間のハチの絵を選ぶ' }); return box; }
   function render(g) {
     document.title = String(g.title || document.title);
     const sections = Array.isArray(g.sections) ? g.sections.slice() : [];
     if (IS_DEV) sections.unshift({ id: 'proto', title: 'この試作について', items: ['この試作は手元だけで動いていて、本物のシートには書きません。', '右上のメニューの「見本をはじめの形に戻す」で、はじめの形に戻ります。'] });
+    if (MB) sections.push(BEE_SECTION);
     const box = document.getElementById('guide-content');
     sections.forEach((s) => {
       const id = String(s.id || '').replace(/[^a-z0-9-]/gi, ''); if (!id) return;
       const a = el('a', '', s.title); a.href = '#g-' + id; a.dataset.id = id; a.addEventListener('click', (e) => { e.preventDefault(); jump(id); }); toc.append(a);
       const sec = el('section', 'guide-section'); sec.id = 'g-' + id; sec.append(el('h2', '', s.title));
       const steps = stepsOf(s.steps), fig = figOf(s.fig);
-      if (fig && (fig.kind === 'flow' || fig.kind === 'cards')) sec.append(flowFig(fig, steps));
+      if (s === BEE_SECTION) sec.append(beeFig());
+      else if (fig && (fig.kind === 'flow' || fig.kind === 'cards')) sec.append(flowFig(fig, steps));
       else if (fig && fig.kind === 'forms') { sec.append(formsFig(fig)); if (steps.length) sec.append(stepList(steps)); }
       else if (fig && fig.kind === 'shot') { const pair = el('div', 'gpair' + (fig.w <= 640 || (fig.w <= 1000 && fig.w / fig.h < 1.6) ? ' is-side' : '')); pair.append(shotFig(fig)); if (steps.length) pair.append(stepList(steps)); sec.append(pair); linkHot(sec); }
       else if (steps.length) sec.append(stepList(steps));
@@ -219,18 +231,37 @@
   window.addEventListener('resize', setTocGap, { passive: true });
   function session() { try { const o = JSON.parse(localStorage.getItem('souzai-number-session-v1') || 'null'); return o && o.t && Date.now() < o.e ? o.t : ''; } catch { return ''; } }
   function askLogin(msg) { status.replaceChildren(document.createTextNode(msg + ' '), Object.assign(el('a', '', '画面でログインする'), { href: 'index.html' })); }
+  // 待ち（0.3 秒を超えたらハチと字・8 秒で「時間がかかっています」）・30 秒で止める・通信や混雑はハチの困り顔と「もう一度」（0.2.7・番号表の画面と同じ決まり）
+  const GIVEUP_MS = 30000;
+  function retryCard(msg) {
+    status.replaceChildren();
+    if (!MB) { status.textContent = msg + '開き直してください。'; return; }
+    MB.error(status, { title: '利用ガイドを読み込めませんでした', text: msg, retryLabel: 'もう一度', onRetry: () => { status.replaceChildren(); start(); }, size: 's64' });
+  }
   async function start() {
     if (!OK) { status.textContent = '窓口の設定が終わると、ガイドを表示します。'; return; }
     const s = session(); if (!s) { askLogin('ログインすると、ガイドを表示します。'); return; }
+    status.replaceChildren(); status.hidden = false;
+    const wait = MB ? MB.wait(status, { text: '利用ガイドを読み込んでいます…' }) : null;
+    if (!wait) status.textContent = '読み込んでいます…';
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null; let gaveUp = false;
+    const timer = ctl ? window.setTimeout(() => { gaveUp = true; ctl.abort(); }, GIVEUP_MS) : 0;
+    let out = null;
     try {
-      const res = await fetch(GAS_URL, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'getGuide', data: {}, session: s }) });
-      const out = await res.json();
-      if (!out || out.ok !== true) { askLogin(out && out.message ? out.message : '読めませんでした。'); return; }
-      const d = out.data || {};
-      guides = (Array.isArray(d.guides) ? d.guides : []).filter((g) => g && FOR_KEYS.indexOf(g.key) >= 0 && typeof g.label === 'string');
-      if (!guides.length) { status.textContent = '読めませんでした。開き直してください。'; return; }
-      show(wantFor() || guides[0].key);
-    } catch { status.textContent = '読み込めませんでした。通信を確かめて、開き直してください。'; }
+      const res = await fetch(GAS_URL, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'getGuide', data: {}, session: s }), signal: ctl ? ctl.signal : undefined });
+      out = await res.json();
+    } catch {
+      if (wait) wait.end();
+      retryCard(gaveUp ? '30 秒たっても返事がありません。通信を確かめて、もう一度お試しください。' : '通信できませんでした。通信を確かめて、もう一度お試しください。');
+      return;
+    } finally { window.clearTimeout(timer); }
+    if (wait) wait.end();
+    status.replaceChildren();
+    if (!out || out.ok !== true) { if (out && out.code === 'BUSY') { retryCard(String(out.message || '混み合っています。')); return; } askLogin(out && out.message ? out.message : '読めませんでした。'); return; }
+    const d = out.data || {};
+    guides = (Array.isArray(d.guides) ? d.guides : []).filter((g) => g && FOR_KEYS.indexOf(g.key) >= 0 && typeof g.label === 'string');
+    if (!guides.length) { status.textContent = '読めませんでした。開き直してください。'; return; }
+    show(wantFor() || guides[0].key);
   }
   window.addEventListener('DOMContentLoaded', start);
 })();

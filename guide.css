@@ -6,7 +6,11 @@
 .guide-for .gfor:hover { background: rgba(255, 255, 255, .18); }
 .guide-for .gfor.is-on { background: #fff; color: var(--brand); }
 @media print { .guide-for { display: none; } }
-.guide-status { padding: 16px; margin: 0; }
+.guide-status { padding: 16px; margin: 0; --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand); }
+/* 待ち・つながらないとき（0.2.7・ハチの部品）: 本文の頭に、字が先・ハチは横のカード */
+.guide-status .mb-wait, .guide-status .mb-err { display: inline-flex; background: #fff; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, .08); }
+/* 待つ間のハチの絵の節: 選ぶ所（もふ／むぎわら） */
+.gbee { margin: 4px 0 12px; --mb-ink: var(--ink); --mb-line: var(--line2); }
 .guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 14px 16px 60px; }
 .guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
 .guide-toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 4px solid transparent; }

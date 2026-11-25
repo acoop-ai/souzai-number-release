@@ -8,23 +8,25 @@
   <meta name="referrer" content="no-referrer">
   <title>商品呼出番号表</title>
   <meta name="application-name" content="商品呼出番号表">
-  <script src="oauth-return.js?v=0.2.6"></script>
-  <link rel="stylesheet" href="styles.css?v=0.2.6">
-  <script src="config.js?v=0.2.6" defer></script>
-  <script src="login.js?v=0.2.6" defer></script>
-  <script src="search-norm.js?v=0.2.6" defer></script>
-  <script src="core.js?v=0.2.6" defer></script>
-  <script src="pack-picture.js?v=0.2.6" defer></script>
-  <script src="sheet-model.js?v=0.2.6" defer></script>
-  <script src="xlsx-write.js?v=0.2.6" defer></script>
-  <script src="app.js?v=0.2.6" defer></script>
-  <script src="view-list.js?v=0.2.6" defer></script>
-  <script src="view-reader.js?v=0.2.6" defer></script>
-  <script src="view-sheet.js?v=0.2.6" defer></script>
-  <script src="view-more.js?v=0.2.6" defer></script>
-  <script src="import-merge.js?v=0.2.6" defer></script>
-  <script src="import-summary.js?v=0.2.6" defer></script>
-  <script src="view-month.js?v=0.2.6" defer></script>
+  <script src="oauth-return.js?v=0.2.7"></script>
+  <link rel="stylesheet" href="mitsubachi.css?v=0.2.7">
+  <link rel="stylesheet" href="styles.css?v=0.2.7">
+  <script src="config.js?v=0.2.7" defer></script>
+  <script src="mitsubachi.js?v=0.2.7" defer></script>
+  <script src="login.js?v=0.2.7" defer></script>
+  <script src="search-norm.js?v=0.2.7" defer></script>
+  <script src="core.js?v=0.2.7" defer></script>
+  <script src="pack-picture.js?v=0.2.7" defer></script>
+  <script src="sheet-model.js?v=0.2.7" defer></script>
+  <script src="xlsx-write.js?v=0.2.7" defer></script>
+  <script src="app.js?v=0.2.7" defer></script>
+  <script src="view-list.js?v=0.2.7" defer></script>
+  <script src="view-reader.js?v=0.2.7" defer></script>
+  <script src="view-sheet.js?v=0.2.7" defer></script>
+  <script src="view-more.js?v=0.2.7" defer></script>
+  <script src="import-merge.js?v=0.2.7" defer></script>
+  <script src="import-summary.js?v=0.2.7" defer></script>
+  <script src="view-month.js?v=0.2.7" defer></script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -61,6 +63,7 @@
             <div id="dev-switch-list"></div>
             <button id="dev-reset" type="button"><strong>見本をはじめの形に戻す</strong><small>手元の偽の窓口のデータを 10 月の形へ</small></button>
           </div>
+          <div id="bee-pick" class="bee-pick" hidden><p class="pop-note"><strong>待つ間・つながらないときのハチの絵</strong><small>この PC に覚えます（店の PC は、使う人みんなに効きます）</small></p></div>
           <button id="signout-button" type="button"><strong>ログアウト</strong></button>
           <p class="pop-note" id="app-version"></p>
         </div>
@@ -83,6 +86,7 @@
       </div>
     </section>
 
+    <section id="empty-panel" class="empty-panel" aria-label="まだ見られる月がありません" hidden></section>
     <section id="month-panel" class="month-panel" role="dialog" aria-labelledby="month-panel-title" hidden></section>
     <section id="seed-panel" class="seed-panel view-scroll" aria-labelledby="seed-title" hidden></section>
     <section id="view-list" class="view" aria-label="一覧" hidden></section>
@@ -91,7 +95,7 @@
     <section id="view-settings" class="view view-scroll" aria-label="設定" hidden></section>
   </main>
 
-  <div id="progress" class="progress" role="status" aria-live="polite" hidden><div><i aria-hidden="true"></i><span>読み込んでいます…</span></div></div>
+  <div id="progress" class="progress" role="status" aria-live="polite" hidden><div class="progress-card" id="progress-card"></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="form-menu" class="pop-menu form-menu" role="menu" hidden></div>
   <div id="tray-menu" class="pop-menu tray-menu" hidden></div>

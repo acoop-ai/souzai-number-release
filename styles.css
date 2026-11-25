@@ -84,9 +84,26 @@ tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
 .dev-accounts { margin-top: 18px; border-top: 1px dashed var(--line2); padding-top: 12px; }
 .dev-title { font-weight: 700; margin: 0 0 8px; font-size: 14px; }
 .dev-accounts .btn { margin: 0 6px 6px 0; }
-.progress { position: fixed; inset: 0; z-index: 90; background: rgba(255, 255, 255, .55); display: flex; align-items: center; justify-content: center; }
-.progress > div { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line2); border-radius: 10px; padding: 12px 18px; box-shadow: 0 6px 18px rgba(0, 0, 0, .15); }
-.progress i { display: inline-block; width: 18px; height: 18px; border: 3px solid var(--brand); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+/* 長い待ちの幕（0.2.7）: 押した直後は透明（押せなくするだけ）・0.3 秒を超えたら薄く敷いてカード（ハチ＋字）。やり直せば直るエラーも同じ所に（ハチの困り顔＋理由＋もう一度）
+   ハチの部品（mitsubachi.css）の色は、この画面の言葉を借りる（地は白・字は画面の字・釦は画面の青） */
+.progress { position: fixed; inset: 0; z-index: 90; background: transparent; display: flex; align-items: center; justify-content: center; padding: 12px; }
+.progress.is-shown { background: rgba(255, 255, 255, .55); }
+.progress.is-error { background: rgba(243, 244, 246, .78); }
+.progress-card { --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand);
+  background: #fff; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .15); max-width: min(560px, 100%); }
+.progress:not(.is-shown) .progress-card { visibility: hidden; }
+.progress.is-plain .progress-card { display: flex; align-items: center; gap: 10px; padding: 12px 18px; } /* 部品が読めないときの前の形（回る印と字） */
+.progress-plain-err { display: grid; gap: 6px; justify-items: start; padding: 14px 18px; }
+.progress-plain-err p { margin: 0; }
+/* 空（店に公開の月がまだ無い）: 止めたハチ・ひとこと・次の一手 */
+.empty-panel { --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand);
+  max-width: 560px; margin: 40px auto; padding: 12px 12px 16px; background: #fff; border-radius: 12px; border: 1px solid var(--line); display: grid; justify-items: start; gap: 4px; }
+.empty-panel .empty-other { margin-left: 74px; }
+@media (max-width: 760px) { .empty-panel { margin: 16px 12px; } .empty-panel .empty-other { margin-left: 12px; } }
+/* 右上のアカウントのメニューの中: 待つ間のハチの絵（もふ／むぎわら） */
+.bee-pick { border-top: 1px dashed var(--line2); margin: 4px 0; padding: 6px 4px 4px; --mb-ink: var(--ink); --mb-line: var(--line2); }
+.bee-pick .pop-note { margin: 0 6px 6px; }
+.bee-pick .mb-pick { padding: 0 6px; flex-wrap: nowrap; white-space: nowrap; } /* もふ・むぎわらを1行に（メニューの幅は中身に合わせて広がる） */
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 95; background: #1f2937; color: #fff; padding: 9px 16px; border-radius: 9px; max-width: min(92vw, 640px); box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
 .toast.is-error { background: #991b1b; }
 .toast button { margin-left: 10px; }

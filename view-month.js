@@ -7,7 +7,7 @@
   const App = window.SouzaiApp;
   const { $, el, C, state, toast, busyButton, api, rid, monthText } = App;
   const M = window.SouzaiImportMerge;
-  const V = '0.2.6';
+  const V = '0.2.7';
   const panel = $('#month-panel'), button = $('#month-add');
   const queue = []; // { key, file, name, status: 'reading'|'ready'|'bad'|'dup'|'done', kind, month, result, merge, summary, note, rid }
   let costsMemo = null; // 比べるための原価（この画面の中だけ・端末に残さない）
@@ -187,13 +187,13 @@
     const sums = queue.filter((q) => q.status === 'ready' && q.kind === 'summary').sort((a, b) => (a.month < b.month ? -1 : 1));
     if (!tables.length && !sums.length) return;
     const done = busyButton(btn, '取り込んでいます…');
-    // 途中で月を開き直すとパネルが閉じる＝画面全体の待ちの印に段階の文字を出し続ける（月を開く部品が印を消すので、開いた後に出し直す）
+    // 途中で月を開き直すとパネルが閉じる＝画面全体の待ちの幕に段階の文字を出し続ける（月を開く部品は、流れの途中なら幕を消さず、失敗をこちらへ投げる）
     let stageText = '取り込んでいます…';
     const say = (t) => { if (t) stageText = t; done.stage(stageText); App.showProgress(stageText); };
-    const loadKeep = async (m) => { await App.loadMonth(m); say(); };
+    const loadKeep = async (m) => { await App.loadMonth(m, { inFlow: true }); say(); };
     say();
     App.flush();
-    const report = []; let lastMonth = '';
+    const report = []; let lastMonth = ''; let retryShown = false;
     try {
       for (const q of tables) {
         say(monthText(q.month) + ' を作っています…');
@@ -215,8 +215,12 @@
       toast(report.join('／'));
     } catch (error) {
       if (error.code === 'SESSION') App.showLogin(error.message);
+      else if (App.RETRYABLE(error)) { // 通信・混雑・30 秒: 同じ幕の中で止めて「もう一度」（送り済みの分は操作番号が同じなので、窓口が前の結果を返す＝二重にしない）
+        retryShown = true;
+        App.showRetry({ title: '取り込みが途中で止まりました', text: error.message + (report.length ? '（済んだ物: ' + report.join('／') + '）' : ''), retry: () => { open(); commitAll($('#month-commit')); }, closeLabel: '閉じる（入れる物の一覧へ）', close: () => open() });
+      }
       else { toast('途中で止まりました: ' + error.message + (report.length ? '（済んだ物: ' + report.join('／') + '）' : ''), true); paintQueue(); }
-    } finally { App.hideProgress(); done(); }
+    } finally { if (!retryShown) App.hideProgress(); done(); }
   }
 
   // ------------------------------------------------------------ サマリー（月間厳選特の文）→ その月の月間特売

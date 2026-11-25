@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.6）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.7・窓口は 0.2.6 のまま）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.6';
+  const APP_VERSION = 'souzai-number-api-0.2.7';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -58,9 +58,55 @@
     done.stage = (t) => { textNow = t; if (shown) show(); window.clearTimeout(slow); slow = window.setTimeout(() => { textNow = SLOW_TEXT; show(); }, SLOW_MS); };
     return done;
   }
-  let progressSlow = 0;
-  function showProgress(message) { const n = $('#progress'); n.querySelector('span').textContent = message; n.hidden = false; window.clearTimeout(progressSlow); progressSlow = window.setTimeout(() => { n.querySelector('span').textContent = SLOW_TEXT; }, SLOW_MS); }
-  function hideProgress() { window.clearTimeout(progressSlow); $('#progress').hidden = true; }
+  // 長い待ちの幕（開く・ログイン・月の切り替え・まとめて取り込む）。0.2.7: 共通の部品 mitsubachi.js（_共通\ミツバチ の写し）のハチを、字の横に添える。
+  //   押した直後は透明の幕で押せなくするだけ。0.3 秒を超えたら幕を薄く敷き、ハチと「〜しています」のカード（0.3 秒までに終われば何も作らない）。
+  //   8 秒で、字の下に「時間がかかっています（通信を確かめています）」。30 秒は api() が通信を打ち切ってエラーにする
+  //   → やり直せば直るエラー（通信・混雑・30 秒）だけ、同じ幕の中にハチの困り顔・理由・「もう一度」（showRetry）。人が直すエラーは、いままでどおりお知らせ（toast）。
+  //   部品が読めない端末でも、前と同じ回る印と字で動く。
+  const MB = window.Mitsubachi || null;
+  const prog = { h: null, plain: null, slow: 0 };
+  const RETRYABLE = (e) => Boolean(e) && (e.code === 'NETWORK' || e.code === 'BUSY'); // 通信の失敗・30 秒・混雑（窓口の BUSY）
+  const NO_MONTH = (e) => Boolean(e) && e.code === 'INPUT' && /公開している月がありません/.test(String(e.message || '')); // 店に公開の月がまだ無い（窓口 Code.gs の viewData_ の決まった文。本物の Code.gs で試験が確かめる）
+  function clearProgressCard() { if (prog.h) { prog.h.end(); prog.h = null; } prog.plain = null; window.clearTimeout(prog.slow); $('#progress-card').replaceChildren(); }
+  function showProgress(message) {
+    const n = $('#progress'), card = $('#progress-card');
+    if (n.classList.contains('is-error')) { clearProgressCard(); n.classList.remove('is-error', 'is-shown'); }
+    n.hidden = false;
+    if (prog.h) { prog.h.stage(message); return; } // 段の字を替える（8 秒を数え直す）
+    if (prog.plain) { prog.plain.textContent = message; window.clearTimeout(prog.slow); prog.slow = window.setTimeout(() => { if (prog.plain) prog.plain.textContent = SLOW_TEXT; }, SLOW_MS); return; }
+    if (MB) { prog.h = MB.wait(card, { text: message, delay: HINT_MS, slowMs: SLOW_MS, slowText: SLOW_TEXT, onShown: () => n.classList.add('is-shown') }); return; }
+    prog.plain = el('span', 'progress-text', message); card.replaceChildren(spinner(), prog.plain); n.classList.add('is-shown', 'is-plain'); // 部品が無いとき（前と同じ形）
+    prog.slow = window.setTimeout(() => { if (prog.plain) prog.plain.textContent = SLOW_TEXT; }, SLOW_MS);
+  }
+  function hideProgress() { clearProgressCard(); const n = $('#progress'); n.hidden = true; n.classList.remove('is-shown', 'is-error', 'is-plain'); }
+  /** やり直せば直るエラー（通信・混雑・30 秒）を、待ちの幕の同じ所に出す。o: { title, text, retry, closeLabel, close }。押すと幕を消してから retry／close */
+  function showRetry(o) {
+    const n = $('#progress'), card = $('#progress-card');
+    clearProgressCard(); n.hidden = false; n.classList.remove('is-plain'); n.classList.add('is-shown', 'is-error');
+    const run = (fn) => () => { hideProgress(); if (fn) fn(); };
+    if (MB) MB.error(card, { title: o.title, text: o.text, retryLabel: 'もう一度', onRetry: run(o.retry), closeLabel: o.closeLabel || '閉じる', onClose: run(o.close), size: 's64' });
+    else { // 部品が無いとき（字と釦だけ）
+      const box = el('div', 'progress-plain-err'); box.setAttribute('role', 'alert'); box.append(el('strong', '', o.title), el('p', '', o.text));
+      const a = el('button', 'btn btn-primary', 'もう一度'); a.type = 'button'; a.addEventListener('click', run(o.retry));
+      const b = el('button', 'btn', o.closeLabel || '閉じる'); b.type = 'button'; b.addEventListener('click', run(o.close));
+      box.append(a, b); card.replaceChildren(box);
+    }
+    const first = card.querySelector('button'); if (first) first.focus();
+  }
+  document.addEventListener('keydown', (e) => { if (e.key !== 'Escape' || !$('#progress').classList.contains('is-error')) return; const bs = $('#progress-card').querySelectorAll('button'); if (bs.length > 1) bs[bs.length - 1].click(); });
+  /** 空（店に公開の月がまだ無い）: 止めたハチ・ひとこと・次の一手（もう一度ひらく）。ログインの札は捨てない（開き直すのにログインし直さなくてよい） */
+  function showEmpty(message, retry) {
+    hideProgress();
+    ['list', 'sheet', 'log', 'settings'].forEach((v) => { $('#view-' + v).hidden = true; });
+    $('#login-panel').hidden = true; $('#month-nav').hidden = true; $('#view-tabs').hidden = true; $('#tb-right').hidden = true; $('#month-panel').hidden = true; $('#seed-panel').hidden = true; showNotice('');
+    const p = $('#empty-panel'); p.replaceChildren(); p.hidden = false;
+    const go = () => { p.hidden = true; retry(); };
+    if (MB) MB.empty(p, { title: 'まだ見られる月がありません', text: message, actionLabel: 'もう一度ひらく', onAction: go, size: 's48' });
+    else { const b = el('button', 'btn btn-primary', 'もう一度ひらく'); b.type = 'button'; b.addEventListener('click', go); p.append(el('h1', '', 'まだ見られる月がありません'), el('p', '', message), b); }
+    const other = el('button', 'btn empty-other', 'ほかのアカウントでログインする'); other.type = 'button';
+    other.addEventListener('click', () => { clearSession(); p.hidden = true; showLogin(''); });
+    p.append(other);
+  }
   function toast(message, error, action) {
     const n = $('#toast'); n.textContent = message; n.classList.toggle('is-error', Boolean(error)); n.hidden = false;
     if (action) { const b = el('button', 'btn btn-small', action.label); b.type = 'button'; b.addEventListener('click', () => { n.hidden = true; action.run(); }); n.append(b); }
@@ -91,6 +137,7 @@
     try { const raw = await response.text(); size = raw.length; result = JSON.parse(raw); } catch { throw gaveUp ? noReply() : appError('窓口の返事を読めませんでした。少し待ってから、もう一度お試しください。', 'NETWORK'); }
     finally { if (timer) window.clearTimeout(timer); }
     perfNote('api:' + action, t0, result && result.ok === false ? String(result.code || 'ERROR') : '', { server: result && result.ms, kb: Math.round(size / 102.4) / 10 });
+    if (result && typeof result.version === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(result.version)) state.serverVersion = result.version; // 窓口の版（右上のメニューに「窓口 …」と並べる）
     if (!result || result.ok !== true) {
       const error = appError(result?.message || '処理を完了できませんでした。', result?.code || 'ERROR');
       if (error.code === 'SESSION' && authenticated && state.session && state.session.t === sent) clearSession();
@@ -413,7 +460,7 @@
 
   // ------------------------------------------------------------ 中身を受け取る
   function applyWorkspace(data) {
-    $('#month-panel').hidden = true; $('#seed-panel').hidden = true;
+    $('#month-panel').hidden = true; $('#seed-panel').hidden = true; $('#empty-panel').hidden = true;
     if (data && data.notSeeded) { // 最初の取り込みの前: PO は取り込みの画面・ほかは準備中（中身は窓口が返していない）
       state.principal = data.principal; state.db = null; state.readOnly = true;
       $('#login-panel').hidden = true; showNotice('');
@@ -422,7 +469,7 @@
       ['#alert-chip', '#save-state', '#excel-button', '#guide-link'].forEach((s) => { $(s).hidden = true; });
       $('#account-label').textContent = state.principal.email.split('@')[0];
       $('#account-role').textContent = state.principal.email + '（' + state.principal.roleLabel + '）';
-      $('#app-version').textContent = '版 ' + APP_VERSION;
+      $('#app-version').textContent = versionText();
       if (views.intake) views.intake.showSeed(state.principal);
       return;
     }
@@ -461,7 +508,7 @@
     $('#account-label').textContent = state.principal.email.split('@')[0];
     $('#account-role').textContent = state.principal.email + '（' + state.principal.roleLabel + '）';
     document.querySelector('[data-view="settings"]').hidden = isView; // 設定は本部と PO（パックの値段は本部も・上限の行数と月を消すは PO だけ。守りは窓口）
-    $('#app-version').textContent = '版 ' + APP_VERSION;
+    $('#app-version').textContent = versionText();
     if (isView && state.view !== 'sheet') state.view = 'sheet';
     Object.values(views).forEach((v) => v.reset && v.reset());
     setView(state.view, true);
@@ -553,13 +600,19 @@
   }
   $('#month-publish').addEventListener('click', (e) => togglePublish(!(state.published && state.published.has(state.month)), e.currentTarget));
 
-  async function loadMonth(month) {
+  /** 月を開く。opt.inFlow＝長い流れの途中（まとめて取り込む）: 開いたあとも幕を消さず、失敗はそのまま投げる（流れの側が止めて「もう一度」を出す） */
+  async function loadMonth(month, opt) {
+    const inFlow = Boolean(opt && opt.inFlow);
     if (hasUnsaved()) { flush(); await save.chain; }
     const t0 = performance.now();
     showProgress(monthText(month) + ' を読み込んでいます…');
-    try { applyWorkspace(await fetchOpen(month)); perfNote('月の切り替え', t0); }
-    catch (error) { if (error.code === 'SESSION') showLogin(error.message); else toast(error.message, true, { label: 'もう一度', run: () => loadMonth(month) }); }
-    finally { hideProgress(); }
+    try { applyWorkspace(await fetchOpen(month)); perfNote('月の切り替え', t0); if (!inFlow) hideProgress(); }
+    catch (error) {
+      if (inFlow) throw error;
+      if (error.code === 'SESSION') { showLogin(error.message); return; }
+      if (RETRYABLE(error)) { const now = state.db ? state.month : ''; showRetry({ title: monthText(month) + ' を開けませんでした', text: error.message, retry: () => loadMonth(month), closeLabel: now ? '閉じる（' + monthText(now) + ' のまま）' : '閉じる', close: () => {} }); return; }
+      hideProgress(); toast(error.message, true, { label: 'もう一度', run: () => loadMonth(month) });
+    }
   }
 
   // ------------------------------------------------------------ 画面の切り替え
@@ -607,6 +660,9 @@
     return close;
   }
   bindMenu($('#account-button'), $('#account-menu'));
+  // 待つ間・つながらないときのハチの絵（もふ／むぎわら・既定はもふ）。右上のアカウントのメニューの中（上の帯は 1366 の幅で1行のまま）。選びはこの端末のブラウザに覚える（部品が受け持つ）
+  if (MB) { const host = $('#bee-pick'); MB.picker(host, { label: '待つ間のハチの絵を選ぶ' }); host.hidden = false; }
+  const versionText = () => '版 ' + APP_VERSION + (state.serverVersion && state.serverVersion !== APP_VERSION ? '（窓口 ' + state.serverVersion + '）' : '');
 
   // ------------------------------------------------------------ Excel（1種類・非表示の列あり）。作ったら原価を捨てる（原価をたたんでいれば）
   function download(bytes, name) {
@@ -691,9 +747,10 @@
   const HELP = { redirect_going: 'Google のログイン画面へ移ります…', redirect_slow: '画面が移らないときは、もう一度押してください。', redirect_failed: 'ログインできませんでした。もう一度お試しください。', redirect_denied: 'ログインが取り消されました。', redirect_state: 'ログインをやり直してください。', popup_closed: 'ログインの窓が閉じられました。もう一度押してください。', popup_failed_to_open: 'ログインの窓が開けません。窓を止める設定を確かめてください。', gis_missing: 'ログインの部品を読み込めません。通信を確かめてください。', slow: '時間がかかっています。もう一度押してください。', unknown: 'ログインできませんでした。もう一度お試しください。' };
   function showLogin(message) {
     state.db = null; state.readOnly = false; document.body.classList.remove('is-view');
+    hideProgress();
     ['list', 'sheet', 'log', 'settings'].forEach((v) => { $('#view-' + v).hidden = true; });
     $('#month-nav').hidden = true; $('#view-tabs').hidden = true; $('#tb-right').hidden = true;
-    $('#month-panel').hidden = true; $('#seed-panel').hidden = true;
+    $('#month-panel').hidden = true; $('#seed-panel').hidden = true; $('#empty-panel').hidden = true;
     $('#login-panel').hidden = false;
     document.title = '商品呼出番号表';
     showNotice(message || '');
@@ -736,16 +793,23 @@
     try { state.tokenClient.requestAccessToken(); } catch { window.clearTimeout(slow); state.tokenJob = null; setLoginButton(true, 'Googleでログイン'); setLoginHelp(HELP.unknown); }
   }
   /** Google の札を窓口に確かめてもらい、アプリの札を受け取る（Google の札はここで捨てる）。札と中身を1往復で */
+  //   通信・混雑（30 秒を含む）は、同じ Google の札のまま「もう一度」（Google の画面を出し直さない・札は約1時間で切れ、切れていればログインの画面へ）。
+  //   店に公開の月がまだ無い店は、空のカード（もう一度ひらく）。ほかは前と同じくログインの画面に理由。Google の札は画面のこの中だけに持ち、端末に残さない
   async function finishLogin(accessToken) {
-    state.loggingIn = true; showProgress('ログインして、読み込んでいます…');
+    state.loggingIn = true; $('#empty-panel').hidden = true; showProgress('ログインして、読み込んでいます…');
     const t0 = performance.now();
     try {
       const data = await api('startSession', { accessToken, withWorkspace: true, withCosts: wantsCosts(), wordsVer: wordsVerHave() }, false);
       saveSession({ t: data.session, e: Number(data.expiresAt) || Date.now() + 7 * 86400000 });
       applyWorkspace(data.workspace);
       perfNote('ログイン', t0);
-    } catch (error) { clearSession(); showLogin(error.message); }
-    finally { state.loggingIn = false; hideProgress(); }
+      hideProgress();
+    } catch (error) {
+      clearSession();
+      if (RETRYABLE(error)) showRetry({ title: 'ログインできませんでした', text: error.message, retry: () => finishLogin(accessToken), closeLabel: 'ログインの画面へ', close: () => showLogin('') });
+      else if (NO_MONTH(error)) showEmpty(error.message, () => finishLogin(accessToken));
+      else showLogin(error.message);
+    } finally { state.loggingIn = false; }
   }
   $('#login-button').addEventListener('click', beginLogin);
   async function signOut() { const s = state.session; if (hasUnsaved()) { flush(); await save.chain; } clearSession(); if (s) { try { await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'endSession', data: {}, session: s.t }) }); } catch {} } showLogin('ログアウトしました。'); }
@@ -780,20 +844,24 @@
     renderDevAccounts();
     if (redirect && redirect.accessToken) { await finishLogin(redirect.accessToken); return; }
     state.session = readSession();
-    if (state.session) {
-      const t0 = performance.now();
-      $('#login-panel').hidden = true; if (state.view === 'list' && views.list) views.list.skeleton();
-      showProgress('前回のログインで開いています…');
-      try { applyWorkspace(await fetchOpen()); perfNote('開く', t0); }
-      catch (error) { clearSession(); showLogin(error.message); }
-      finally { hideProgress(); }
-      return;
-    }
+    if (state.session) { await openSaved(); return; }
     showLogin('');
     if (redirect && redirect.error) setLoginHelp(HELP[redirect.error] || HELP.unknown);
   }
+  /** 前回のログインで開く（開いたときと「もう一度」で同じ）。通信・混雑（30 秒を含む）はログインの札を捨てずに「もう一度」・店に公開の月が無い店は空のカード・ほかは前と同じくログインの画面へ */
+  async function openSaved() {
+    const t0 = performance.now();
+    $('#login-panel').hidden = true; $('#empty-panel').hidden = true; if (state.view === 'list' && views.list) views.list.skeleton();
+    showProgress('前回のログインで開いています…');
+    try { applyWorkspace(await fetchOpen()); perfNote('開く', t0); hideProgress(); }
+    catch (error) {
+      if (RETRYABLE(error) && state.session) { showRetry({ title: '開けませんでした', text: error.message, retry: openSaved, closeLabel: 'ログインの画面へ', close: () => showLogin('') }); return; }
+      if (NO_MONTH(error) && state.session) { showEmpty(error.message, openSaved); return; }
+      clearSession(); showLogin(error.message);
+    }
+  }
 
-  window.SouzaiApp = { ensureWords, notePlace, placeNow, state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress };
+  window.SouzaiApp = { ensureWords, notePlace, placeNow, state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress, showRetry, RETRYABLE };
   // 部品が全部読み込まれてから始める（defer の順に読まれ、DOMContentLoaded は全部のあと）
   window.addEventListener('DOMContentLoaded', () => { start().catch(() => {}); });
 })();
