@@ -1,15 +1,16 @@
-/* >>> mitsubachi 0.2.0・正の印 5118dabcc036・mitsubachi.js の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
-/* ミツバチの共通部品 0.2.0（段0・2026-11-24）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.js）
+/* >>> mitsubachi 0.3.0・正の印 b31d102d0f49・mitsubachi.js の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
+/* ミツバチの共通部品 0.3.0（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.js）
    - 各システムは版を作るときに make_copies.py で写す（手で直さない・動いている最中に読みに行かない）。写しが正と同じかは check_copies.py で数える。
    - 絵は2案だけ: B もふはち（既定）・C むぎわらはち。使う人が選ぶ（setStyle・ブラウザに覚える。覚えられない端末でも B で動く）。
    - 画像ファイル・外の読み込みなし（通信が切れても絵は崩れない）。絵は部品の中で SVG の字を組む。外から来た値は絵に入れない（案・角度・大きさは決まった物だけ受ける）。
    - 字（案内の文）は textContent で入れる（HTML として働かない）。見た目は mitsubachi.css。style の属性を書かない（CSP の style-src 'self' の画面でも動く）。
    - 動きは Web Animations（transform と opacity だけ）。端末の「動きを減らす」・setMotion(false) のときは止めた絵（動きを作らない）。
+   - 待ちのハチは、横長の 8 の字（ミツバチの 8 の字ダンスの形）を 1 周 3.6 秒で飛ぶ。進む方へ向き（左へ進むときは左右を返す）、羽ばたきは2枚の絵の切り替え（0.3.0）。
    - 待ちは delay（既定 0.3 秒）までに終われば何も作らない＝速い操作には一切の重さが乗らない。
    - 質感のフィルタ・鉛筆の線は既定で外す（重さを測って決めた: 提案書 V1「6 速さと守り」）。 */
 (function (G) {
   'use strict';
-  var VERSION = '0.2.0';
+  var VERSION = '0.3.0';
   var CHEEK = '#F08A78', DARK = '#2A170A';
   var own = function (o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); };
   var STYLES = {
@@ -252,6 +253,9 @@
   function onStyle(fn) { if (typeof fn === 'function') styleFns.push(fn); }
   function styleList() { return KEYS.map(function (k) { return { key: k, name: STYLES[k].name, label: STYLES[k].label }; }); }
   var mq = G.matchMedia ? G.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  /* 端末の「動きを減らす」がオンか（止まって見える訳を、選ぶ所に1行で出すため） */
+  function deviceReduced() { return !!(mq && mq.matches); }
+  var motionFns = [];   // 動きの設定が変わったら呼ぶ（選ぶ所の1行）
   function motionOn() {
     var v = motionForced != null ? motionForced : read(MOTION_KEY);
     if (v === 'off') return false;
@@ -260,7 +264,7 @@
   }
   var live = [];   // いま出ている待ちのカード（設定が変わったら、止める・動かす）
   function forget(h) { var i = live.indexOf(h); if (i >= 0) live.splice(i, 1); }
-  function syncMotion() { var on = motionOn(); live.slice().forEach(function (h) { h.motion(on); }); }
+  function syncMotion() { var on = motionOn(); live.slice().forEach(function (h) { h.motion(on); }); motionFns.slice().forEach(function (fn) { try { fn(on); } catch (e) { /* 聞き手の失敗で止めない */ } }); }
   function setMotion(on) { motionForced = on ? 'on' : 'off'; write(MOTION_KEY, motionForced); syncMotion(); }
   if (mq) { try { mq.addEventListener('change', syncMotion); } catch (e) { try { mq.addListener(syncMotion); } catch (e2) { /* 古い端末 */ } } }
   try { G.addEventListener('storage', function (e) { if (e.key === STYLE_KEY) { styleForced = null; var k = getStyle(); styleFns.slice().forEach(function (fn) { try { fn(k); } catch (x) { } }); } }); } catch (e) { /* 古い端末 */ }
@@ -282,11 +286,11 @@
   /* 待ち（画面ぜんたいが待つ幕の中のカード）。字が先・蜂は横に添える。
      delay（既定 300ms）までに end() されたら、何も作らない。slowMs（既定 8 秒）で sub に「時間がかかっています」。
      30 秒で止めて理由と「もう一度」を出すのは、呼ぶ側（通信を打ち切る側）が error() で出す。
-     o: {text, sub, delay, slowMs, slowText, onShown(box), comb:true（本当の進み具合があるときだけ）}
+     o: {text, sub, delay, slowMs, slowText, onShown(box), comb:true（本当の進み具合があるときだけ）, style:'B'|'C'（この1枚だけ案を決める・見本など。省けば選んだ案）}
      返す値 h: end()・stage(字)＝段の字を替えて 8 秒を数え直す・progress(0〜1)・built（作ったか） */
   function wait(host, o) {
     o = o || {};
-    var h = { ended: false, built: false, box: null, anims: [], timers: [], start: null };
+    var h = { ended: false, built: false, box: null, anims: [], timers: [], start: null, still: null, style: own(STYLES, o.style) ? o.style : null };
     var delay = o.delay == null ? 300 : Math.max(0, +o.delay || 0);
     var slowMs = o.slowMs == null ? 8000 : +o.slowMs;
     function slowLater() {
@@ -310,6 +314,7 @@
     h.motion = function (on) {
       if (!h.box) return;
       h.box.classList.toggle('mb-still', !on);
+      if (!on && h.still) h.still();   // 止まった絵（正面の1枚）は、止めるときに作る
       if (on && !h.anims.length && h.start) h.anims = h.start();
       if (!on) { h.anims.forEach(function (a) { try { a.cancel(); } catch (e) { /* 古い端末 */ } }); h.anims = []; }
     };
@@ -330,18 +335,44 @@
     if (delay > 0) h.timers.push(setTimeout(build, delay)); else build();
     return h;
   }
-  /* その場で羽ばたく1匹（軽い形・CPU 4倍で +30 ms/秒）。正面の絵2枚（羽の角度ちがい）を重ね、外側の箱を上下にゆらす。動きは動かすときに作る */
+  /* 8 の字に飛ぶ1匹（0.3.0・2026-11-25 PO「ハチが 8 の字に飛んで回る」）。横長の 8 の字（∞・真ん中で交わる）を 1 周 3.6 秒で回る。
+     横向きの絵（羽の角度ちがいの2枚を重ね、外側の箱の opacity で羽ばたく）を、進む方へ向け（左へ進むときは左右を返す＝端で向きを変える）、
+     上り下りに合わせて少し傾ける。動かすのは外側の箱の transform だけ（絵の描き直しが起きない）。道筋の点は1回だけ作って使い回す。
+     端末の「動きを減らす」なら、飛ぶ絵は隠して正面の止まった絵（0.2.0 と同じ大きさ・置き場） */
+  var LOOP = { ms: 3600, n: 36, ax: 40, ay: 14, frames: null };
+  function loopFrames() {
+    if (LOOP.frames) return LOOP.frames;
+    var fly = [], shadow = [];
+    for (var i = 0; i <= LOOP.n; i++) {
+      var t = (i + .5) / LOOP.n * 2 * Math.PI;                                // 半コマずらす（輪の端で向きを返す瞬間に、点を置かない＝幅 0 の絵を止めて見せない）
+      var x = LOOP.ax * Math.cos(t), y = LOOP.ay * Math.sin(2 * t);          // 横長の 8 の字（右の輪は時計回り・左の輪は反時計回り）
+      var dx = -LOOP.ax * Math.sin(t), dy = 2 * LOOP.ay * Math.cos(2 * t);  // 進む向き
+      var face = clamp(dx / (LOOP.ax * .3), -1, 1);                         // 右へ進むとき 1・左へ −1（輪の端で、すばやく向きを変える）
+      var tilt = face * clamp(Math.atan2(dy, Math.abs(dx) + 1e-6) * 180 / Math.PI, -24, 24); // 下りは頭を下げ、上りは上げる
+      fly.push({ transform: 'translate(' + f(x) + 'px,' + f(y) + 'px) rotate(' + f(tilt) + 'deg) scaleX(' + f(face) + ')' });
+      shadow.push({ transform: 'translateX(' + f(x) + 'px) scale(' + f(.78 + .22 * (y + LOOP.ay) / (2 * LOOP.ay)) + ')' });
+    }
+    LOOP.frames = { fly: fly, shadow: shadow };
+    return LOOP.frames;
+  }
   function buildHover(box, h) {
-    var st = box.appendChild(E('div', 'mb-stage'));
+    var st = box.appendChild(E('div', 'mb-stage mb-loop'));
     var sh = st.appendChild(E('span', 'mb-shadow'));
     var fly = st.appendChild(E('div', 'mb-fly'));
     var l = fly.appendChild(E('span', 'mb-v'));
-    l.innerHTML = '<span class="mb-f mb-f0">' + svg('F', { wing: 0 }) + '</span><span class="mb-f mb-f1">' + svg('F', { wing: 1 }) + '</span>';
-    if (typeof fly.animate !== 'function') { box.classList.add('mb-noanim'); return; }
+    var so = h.style || undefined;
+    l.innerHTML = '<span class="mb-f mb-f0">' + svg('S', { wing: 0, style: so }) + '</span><span class="mb-f mb-f1">' + svg('S', { wing: 1, style: so }) + '</span>';
+    h.still = function () {
+      if (st.querySelector('.mb-rest')) return;
+      var r = st.appendChild(E('span', 'mb-rest'));
+      r.innerHTML = svg('F', { wing: 0, style: so });
+    };
+    if (typeof fly.animate !== 'function') { box.classList.add('mb-noanim'); h.still(); return; }
     h.start = function () {
+      var fr = loopFrames(), loop = { duration: LOOP.ms, iterations: Infinity };
       return [
-        fly.animate([{ transform: 'translateY(0) rotate(0deg)' }, { transform: 'translateY(-7px) rotate(3deg)', offset: .5 }, { transform: 'translateY(0) rotate(0deg)' }], { duration: 1700, iterations: Infinity, easing: 'ease-in-out' }),
-        sh.animate([{ transform: 'scale(1)' }, { transform: 'scale(.82)', offset: .5 }, { transform: 'scale(1)' }], { duration: 1700, iterations: Infinity, easing: 'ease-in-out' }),
+        fly.animate(fr.fly, loop),
+        sh.animate(fr.shadow, loop),
         l.firstChild.animate([{ offset: 0, opacity: 1, easing: 'steps(1,end)' }, { offset: .5, opacity: 0, easing: 'steps(1,end)' }, { offset: 1, opacity: 0 }], { duration: 160, iterations: Infinity }),
         l.lastChild.animate([{ offset: 0, opacity: 0, easing: 'steps(1,end)' }, { offset: .5, opacity: 1, easing: 'steps(1,end)' }, { offset: 1, opacity: 1 }], { duration: 160, iterations: Infinity })
       ];
@@ -358,7 +389,7 @@
     }).join('') + '</svg>';
     var fills = Array.prototype.slice.call(wrap.querySelectorAll('.mb-hf'));
     var fl = wrap.appendChild(E('span', 'mb-flyer'));
-    fl.appendChild(bee({ view: 'F', size: 's32' }));
+    fl.appendChild(bee({ view: 'F', size: 's32', style: h.style || undefined }));
     var pct = box.appendChild(E('div', 'mb-pct', '0%'));
     var cur = -1;
     function place(i) { var c = HC[i]; fl.style.left = (c[0] / 220 * 100) + '%'; fl.style.top = ((c[1] - 9) / 190 * 100) + '%'; }
@@ -373,12 +404,12 @@
   }
 
   /* エラー（やり直せば直るものだけ＝通信・混雑・30 秒。入力の誤り・権限・保存できていない、には使わない）
-     o: {title, text, retryLabel, onRetry(box), closeLabel, onClose(box), size}。押した釦はすぐ薄くする（二度押しで2回呼ばない） */
+     o: {title, text, retryLabel, onRetry(box), closeLabel, onClose(box), size, style}。押した釦はすぐ薄くする（二度押しで2回呼ばない） */
   function error(host, o) {
     o = o || {};
     var box = E('div', 'mb-err');
     box.setAttribute('role', 'alert');
-    var b = box.appendChild(bee({ view: 'F', mood: 'sad', size: SIZES.test(o.size) ? o.size : 's64' }));
+    var b = box.appendChild(bee({ view: 'F', mood: 'sad', size: SIZES.test(o.size) ? o.size : 's64', style: o.style }));
     if (motionOn()) b.classList.add('mb-wob');
     var tx = box.appendChild(E('div', 'mb-txt'));
     tx.appendChild(E('b', 'mb-ttl', o.title || 'つながりませんでした'));
@@ -396,11 +427,11 @@
     host.appendChild(box);
     return box;
   }
-  /* 空（まだ何も無い）。動かさない。次の一手の釦を添える。o: {title, text, actionLabel, onAction, size} */
+  /* 空（まだ何も無い）。動かさない。次の一手の釦を添える。o: {title, text, actionLabel, onAction, size, style} */
   function empty(host, o) {
     o = o || {};
     var box = E('div', 'mb-empty');
-    box.appendChild(bee({ view: '3F', size: SIZES.test(o.size) ? o.size : 's48' }));
+    box.appendChild(bee({ view: '3F', size: SIZES.test(o.size) ? o.size : 's48', style: o.style }));
     var tx = box.appendChild(E('div', 'mb-txt'));
     tx.appendChild(E('b', 'mb-ttl', o.title || 'まだありません'));
     if (o.text) tx.appendChild(E('div', 'mb-sub', o.text));
@@ -440,9 +471,14 @@
     function paint() { var cur = getStyle(); btns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === cur)); }); }
     paint(); onStyle(paint);
     host.appendChild(box);
+    /* 止まって見える訳（端末の「動きを減らす」がオンの時だけ1行） */
+    var note = E('p', 'mb-pick-note', 'この PC は『動きを減らす』の設定なので、ハチは止まって見えます');
+    note.hidden = !deviceReduced();
+    host.appendChild(note);
+    motionFns.push(function () { note.hidden = !deviceReduced(); });
     return box;
   }
 
   G.Mitsubachi = { version: VERSION, svg: svg, bee: bee, wait: wait, error: error, empty: empty, done: done, picker: picker,
-    getStyle: getStyle, setStyle: setStyle, onStyle: onStyle, styleList: styleList, motionOn: motionOn, setMotion: setMotion, views: VIEWS.slice() };
+    getStyle: getStyle, setStyle: setStyle, onStyle: onStyle, styleList: styleList, motionOn: motionOn, setMotion: setMotion, deviceReduced: deviceReduced, views: VIEWS.slice() };
 })(window);

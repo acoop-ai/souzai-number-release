@@ -104,6 +104,27 @@ tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
 .bee-pick { border-top: 1px dashed var(--line2); margin: 4px 0; padding: 6px 4px 4px; --mb-ink: var(--ink); --mb-line: var(--line2); }
 .bee-pick .pop-note { margin: 0 6px 6px; }
 .bee-pick .mb-pick { padding: 0 6px; flex-wrap: nowrap; white-space: nowrap; } /* もふ・むぎわらを1行に（メニューの幅は中身に合わせて広がる） */
+/* 待ちのカードを、待っている所（本文の場所）の真ん中に（0.2.8: 利用ガイドを開くときのハチが左上に出ていた）。利用ガイドの「読み込み中」の欄とハチの見本で使う */
+.wait-place { flex: 1; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center;
+  --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand); }
+.wait-place .mb-wait, .wait-place .mb-err { text-align: left; background: #fff; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, .08); max-width: min(560px, 100%); }
+/* ハチの見本（0.2.8）: 上の帯と同じ所に見本の帯（← 元の画面へ戻る・いまの場面・前／止める／次）。すぐ下に場面の説明を小さく。本物の幕・カードはそのまま使う */
+.bee-demo-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 97; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; min-height: 44px; background: #2b2418; color: #fff; } /* 左右の余白と高さは上の帯と同じ（← 元の画面へ戻る が ← 戻る と同じ所に来る。高さは bee-demo.js が上の帯に合わせる） */
+.bee-demo-bar .bd-badge { background: #f0b531; color: #3b2a1a; border-radius: 6px; padding: 1px 8px; font-weight: 800; font-size: 13.5px; white-space: nowrap; }
+.bee-demo-bar .bd-count { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+.bee-demo-bar .bd-style { border: 1px solid rgba(255, 255, 255, .55); border-radius: 999px; padding: 0 10px; font-size: 13.5px; white-space: nowrap; }
+.bee-demo-bar .bd-name { font-size: 15px; min-width: 0; }
+.bee-demo-bar .bd-ctl { display: inline-flex; gap: 4px; margin-left: auto; }
+.bee-demo-bar .bd-pause[aria-pressed="true"] { background: #f0b531; color: #3b2a1a; border-color: #f0b531; }
+.bee-demo-cap { position: fixed; left: 0; right: 0; z-index: 97; display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 5px 14px; background: #fff8e1; color: #3b2a1a; border-bottom: 1px solid #e8d49a; font-size: 14px; }
+.bee-demo-cap .bd-still { font-weight: 700; }
+.bee-demo-shield { position: fixed; inset: 0; z-index: 89; background: transparent; }
+.bee-demo-stage { position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; background: var(--bg); overflow: auto; }
+.bee-demo-stage.is-guide { background: #fff; display: flex; flex-direction: column; }
+/* メニューの入口（ハチの絵を選ぶ所の下） */
+.bee-pick .bee-demo-open { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 7px 10px; margin-top: 4px; border-radius: 6px; }
+.bee-pick .bee-demo-open:hover { background: #eef2f7; }
+.bee-pick .mb-pick-note { margin: 4px 10px 2px; }
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 95; background: #1f2937; color: #fff; padding: 9px 16px; border-radius: 9px; max-width: min(92vw, 640px); box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
 .toast.is-error { background: #991b1b; }
 .toast button { margin-left: 10px; }
@@ -345,6 +366,7 @@ tr.detail-row td { background: #f8fafc; height: auto; white-space: normal; paddi
 .pack-edit input.is-bad { border-color: var(--red); background: #fff5f5; }
 .pack-yen { margin-left: 3px; font-size: 14px; }
 .pack-arrow { font-size: 18px; color: var(--ink2); }
+.pack-left { min-width: 0; max-width: 100%; overflow-x: auto; } /* 0.2.8: 狭い幅では表だけを横に送る枠にする（左の列「何段め」が枠の左の端に残る。前は画面の余白 16px の分ずれて、間から送った値がのぞいた） */
 .pack-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .pack-state { margin: 0; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
 .pack-state.is-ok { color: var(--ok); }
@@ -399,6 +421,7 @@ details.perf { margin-top: 16px; font-size: 13.5px; }
 @media (max-width: 760px) {
   body { font-size: 14.5px; }
   .topbar { padding: 5px 8px; gap: 4px 8px; }
+  .bee-demo-bar { padding: 5px 8px; gap: 4px 8px; }
   .tb-left { flex-wrap: wrap; gap: 4px 8px; width: 100%; }
   .tb-right { flex-wrap: wrap; gap: 4px 6px; width: 100%; }
   .brand { font-size: 15px; }
@@ -414,10 +437,10 @@ details.perf { margin-top: 16px; font-size: 13.5px; }
   .search-box input { width: 100%; }
   .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 3px; }
   .list-hint { display: none; }
-  .list-table { min-width: 1042px; } .list-table.has-costs { min-width: 1322px; } .list-table.reader-table { min-width: 988px; }
+  .list-table { min-width: 1004px; } .list-table.has-costs { min-width: 1284px; } .list-table.reader-table { min-width: 950px; } /* 0.2.8: 名前の列を 170→132px（下）にした分だけ狭く */
   .fx-bar { padding: 0 8px 4px; }
   .fx-label { min-width: 0; font-size: 12.5px; }
-  .list-table .c-name, .list-table.has-costs .c-name { flex-basis: 170px; }
+  .list-table .c-name, .list-table.has-costs .c-name { flex-basis: 132px; } /* 0.2.8: 送っても残す左の列（番号 68＋名前）を画面の幅の 6 割まで（前は 238px＝375 の幅の 63%・横に送れる所が狭く、見出しが本文の列とずれて見えた） */
   .pop-menu { max-width: calc(100vw - 16px); }
   .sheet-tabs button { padding: 3px 8px; }
   .usage-bar { width: 44px; }
@@ -437,4 +460,5 @@ details.perf { margin-top: 16px; font-size: 13.5px; }
   .topbar .nav-btn { font-size: 12.5px; padding: 2px 6px; }
   .topbar .save-state { font-size: 13px; }
   .topbar .alert-chip { padding: 3px 9px; }
+  .bee-demo-bar { padding: 6px 10px; }
 }

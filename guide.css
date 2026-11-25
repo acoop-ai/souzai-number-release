@@ -7,11 +7,10 @@
 .guide-for .gfor.is-on { background: #fff; color: var(--brand); }
 @media print { .guide-for { display: none; } }
 .guide-status { padding: 16px; margin: 0; --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand); }
-/* 待ち・つながらないとき（0.2.7・ハチの部品）: 本文の頭に、字が先・ハチは横のカード */
-.guide-status .mb-wait, .guide-status .mb-err { display: inline-flex; background: #fff; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, .08); }
+/* 待ち・つながらないとき（ハチの部品）: 本文の場所の真ん中にカード（0.2.8: 前は本文の頭の左上に出ていた。置き方は styles.css の .wait-place＝ハチの見本と同じ） */
 /* 待つ間のハチの絵の節: 選ぶ所（もふ／むぎわら） */
 .gbee { margin: 4px 0 12px; --mb-ink: var(--ink); --mb-line: var(--line2); }
-.guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 14px 16px 60px; }
+.guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1640px; margin: 0 auto; padding: 14px 16px 60px; } /* 0.2.8: 1440→1640（1920 の幅で右の空きを 1 割までに。文の段落は下の .gnotes で 1 行 60 字ほどに止め、図と写真が幅を使う） */
 .guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
 .guide-toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 4px solid transparent; }
 .guide-toc a:hover { background: #eef2f7; }
@@ -44,7 +43,7 @@
 .gsteps li .gnum { position: absolute; left: 6px; top: 5px; }
 .gsteps li strong { color: var(--ink); font-size: 16px; margin-right: 6px; }
 .gsteps li.is-hot { background: #fff1e6; }
-.gnotes { margin: 12px 0 0; padding-left: 1.3em; }
+.gnotes { margin: 12px 0 0; padding-left: 1.3em; max-width: 62em; }
 .gnotes li { margin-bottom: 4px; font-size: 16px; }
 
 /* 流れの箱・並べた箱 */

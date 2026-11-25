@@ -1,5 +1,5 @@
-/* >>> mitsubachi 0.2.0・正の印 5118dabcc036・mitsubachi.css の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
-/* ミツバチの共通部品の見た目 0.2.0（段0・2026-11-24）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.css）。写しは make_copies.py が作る・手で直さない。
+/* >>> mitsubachi 0.3.0・正の印 b31d102d0f49・mitsubachi.css の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
+/* ミツバチの共通部品の見た目 0.3.0（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.css）。写しは make_copies.py が作る・手で直さない。
    色は画面（ホスト）の言葉を借りる: --mb-surface・--mb-ink・--mb-muted・--mb-line・--mb-btn-bg・--mb-btn-ink・--mb-btn-edge。無ければ下の既定（はちみつの黄）。
    蜂の絵の色（はちみつの黄・こげ茶の線）は全システムで同じ。字体は画面の物（外から読む字体は使わない）。 */
 .mb-wait, .mb-err, .mb-empty, .mb-done, .mb-pick {
@@ -23,12 +23,21 @@
 .mb-f { position: absolute; inset: 0; will-change: opacity; }
 .mb-f1 { opacity: 0; }
 .mb-shadow { position: absolute; left: 16px; bottom: 2px; width: 32px; height: 7px; border-radius: 50%; background: rgba(60, 40, 10, .14); will-change: transform; }
+/* 8 の字に飛ぶ（0.3.0）: 飛ぶ所は横 136px・縦 86px。ハチ（48px）は真ん中から左右 40px・上下 14px の 8 の字を回る（動きは mitsubachi.js の transform だけ） */
+.mb-loop { width: 136px; height: 86px; }
+.mb-loop .mb-fly { left: 44px; top: 15px; width: 48px; height: 48px; }
+.mb-loop .mb-shadow { left: 52px; bottom: 3px; width: 32px; height: 6px; }
+.mb-rest { display: none; position: absolute; left: 4px; top: 6px; width: 56px; height: 56px; }
+.mb-rest svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .mb-wtxt { display: grid; gap: 2px; min-width: 12em; max-width: 30em; }
 .mb-cap { font-weight: 700; font-size: 15px; }
 .mb-wait .mb-sub { font-size: 13.5px; color: var(--mb-m); min-height: 1.55em; }
 .mb-slow .mb-sub { color: var(--mb-i); font-weight: 700; }
-/* 動きなし（端末の「動きを減らす」・setMotion(false)）: 止めた正面の1枚・影は出さない */
+/* 動きなし（端末の「動きを減らす」・setMotion(false)）: 止めた正面の1枚・影は出さない（飛ぶ所は 0.2.0 と同じ 64×74 に縮める） */
 .mb-still .mb-shadow, .mb-noanim .mb-shadow { display: none; }
+.mb-still .mb-loop, .mb-noanim .mb-loop { width: 64px; height: 74px; }
+.mb-still .mb-loop .mb-fly, .mb-noanim .mb-loop .mb-fly { display: none; }
+.mb-still .mb-rest, .mb-noanim .mb-rest { display: block; }
 .mb-still .mb-f1, .mb-noanim .mb-f1 { opacity: 0; }
 .mb-still .mb-f0, .mb-noanim .mb-f0 { opacity: 1; }
 /* 巣（本当の進み具合があるときだけ・縦に置く） */
@@ -69,6 +78,9 @@
 .mb-pick-btn:hover { border-color: var(--mb-be); }
 .mb-pick-btn[aria-pressed="true"] { background: #fff4d6; border: 2px solid var(--mb-be); font-weight: 700; }
 .mb-pick-btn[aria-pressed="true"]::after { content: "✓"; margin-left: 2px; }
+/* 止まって見える訳（端末の「動きを減らす」がオンの時だけ） */
+.mb-pick-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--mb-muted, #5d5444); white-space: normal; max-width: 24em; }
+.mb-pick-note[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .mb-wob, .mb-hop { animation: none !important; }
@@ -76,5 +88,5 @@
 }
 /* 印刷: 絵は出さない（字は残す） */
 @media print {
-  .mb-bee, .mb-stage, .mb-comb .mb-flyer, .mb-pick { display: none !important; }
+  .mb-bee, .mb-stage, .mb-comb .mb-flyer, .mb-pick, .mb-pick-note { display: none !important; }
 }

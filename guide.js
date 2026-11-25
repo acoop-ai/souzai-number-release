@@ -197,11 +197,12 @@
   // 待つ間のハチの絵（0.2.7）: 画面の部品（mitsubachi.js）の説明と選ぶ所。本文の原本は窓口だが、この節は公開の画面にある部品そのものの説明（内部の手順は無い）なので、
   //   窓口を貼り直さずに画面の側に置く（次に窓口を直す版で getGuide_ へ移す）。部品が読めない端末では節ごと出さない
   const MB = window.Mitsubachi || null;
-  const BEE_SECTION = { id: 'bee', title: '待つ間のハチの絵', items: [
-    '0.3 秒より長く待つときと、つながらないときに、字の横にハチが出ます（短い待ちには出ません）。',
-    '絵は「もふ」と「むぎわら」から選べます（はじめは もふ）。右上のメニュー（▾）でも選べます。',
-    '選んだ絵は、この PC に覚えます。店の PC はみんなで使うので、選ぶと、その PC を使う人みんなの絵が替わります。',
-    '端末の「動きを減らす」がオンなら、止まった絵で出ます。'
+  const BEE_SECTION = { id: 'bee', title: '待つ間のハチの絵', items: [ // 文は 200 字まで（screen_guide.js が数える）
+    'ハチは 0.3 秒より長い待ちで 8 の字に飛び、つながらないときは困り顔で出ます。',
+    '絵は もふ／むぎわら から選べます（右上のメニュー ▾ でも）。',
+    '選んだ絵はこの PC に覚えます（店の PC はみんなで使うので、全員に効きます）。',
+    '出方は、右上のメニュー ▾ の「ハチの見本を見る」で見られます。',
+    '止まって見えるのは、Windows の「アニメーション効果」がオフの PC です。'
   ] };
   function beeFig() { const box = el('div', 'gbee'); MB.picker(box, { label: '待つ間のハチの絵を選ぶ' }); return box; }
   function render(g) {
@@ -232,6 +233,7 @@
   function session() { try { const o = JSON.parse(localStorage.getItem('souzai-number-session-v1') || 'null'); return o && o.t && Date.now() < o.e ? o.t : ''; } catch { return ''; } }
   function askLogin(msg) { status.replaceChildren(document.createTextNode(msg + ' '), Object.assign(el('a', '', '画面でログインする'), { href: 'index.html' })); }
   // 待ち（0.3 秒を超えたらハチと字・8 秒で「時間がかかっています」）・30 秒で止める・通信や混雑はハチの困り顔と「もう一度」（0.2.7・番号表の画面と同じ決まり）
+  //   置き場は本文の場所の真ん中（#guide-status は .wait-place＝styles.css。0.2.8: 前は本文の頭の普通の箱に左寄せのカードを入れていて、左上に出た）
   const GIVEUP_MS = 30000;
   function retryCard(msg) {
     status.replaceChildren();

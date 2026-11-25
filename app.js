@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.7・窓口は 0.2.6 のまま）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.8・窓口は 0.2.6 のまま）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.7';
+  const APP_VERSION = 'souzai-number-api-0.2.8';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -15,6 +15,8 @@
   const SESSION_MSG = 'ログインの期限が切れました。もう一度ログインしてください。';
   const GIVEUP_MS = 30000, SLOW_MS = 8000, HINT_MS = 300, SAVE_WAIT_MS = 700;
   const SLOW_TEXT = '時間がかかっています（通信を確かめています）…';
+  // 通信の失敗の字（api の打ち切り・切れた時と、ハチの見本で同じ字を使う）
+  const NET_MSG = { timeout: '30 秒たっても返事がありません。通信を確かめて、もう一度お試しください（入れた物は消えません）。', offline: '通信できませんでした。通信を確かめて、もう一度お試しください（入れた物は消えません）。' };
   const L = window.SouzaiLogin, SN = window.SearchNorm || null, C = window.SouzaiCore, S = window.SouzaiSheet, X = window.SouzaiXlsx;
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt !== undefined && txt !== null) n.textContent = String(txt); return n; };
@@ -63,18 +65,19 @@
   //   8 秒で、字の下に「時間がかかっています（通信を確かめています）」。30 秒は api() が通信を打ち切ってエラーにする
   //   → やり直せば直るエラー（通信・混雑・30 秒）だけ、同じ幕の中にハチの困り顔・理由・「もう一度」（showRetry）。人が直すエラーは、いままでどおりお知らせ（toast）。
   //   部品が読めない端末でも、前と同じ回る印と字で動く。
+  //   0.2.8: ハチは 8 の字に飛ぶ（部品 0.3.0）。opt（showProgress）・o.style（showRetry）・style（fillEmpty）は、ハチの見本（bee-demo.js）だけが使う＝絵の案をこの1枚だけ決める・8 秒を縮める。
   const MB = window.Mitsubachi || null;
   const prog = { h: null, plain: null, slow: 0 };
   const RETRYABLE = (e) => Boolean(e) && (e.code === 'NETWORK' || e.code === 'BUSY'); // 通信の失敗・30 秒・混雑（窓口の BUSY）
   const NO_MONTH = (e) => Boolean(e) && e.code === 'INPUT' && /公開している月がありません/.test(String(e.message || '')); // 店に公開の月がまだ無い（窓口 Code.gs の viewData_ の決まった文。本物の Code.gs で試験が確かめる）
   function clearProgressCard() { if (prog.h) { prog.h.end(); prog.h = null; } prog.plain = null; window.clearTimeout(prog.slow); $('#progress-card').replaceChildren(); }
-  function showProgress(message) {
-    const n = $('#progress'), card = $('#progress-card');
+  function showProgress(message, opt) {
+    const n = $('#progress'), card = $('#progress-card'); const o = opt || {};
     if (n.classList.contains('is-error')) { clearProgressCard(); n.classList.remove('is-error', 'is-shown'); }
     n.hidden = false;
     if (prog.h) { prog.h.stage(message); return; } // 段の字を替える（8 秒を数え直す）
     if (prog.plain) { prog.plain.textContent = message; window.clearTimeout(prog.slow); prog.slow = window.setTimeout(() => { if (prog.plain) prog.plain.textContent = SLOW_TEXT; }, SLOW_MS); return; }
-    if (MB) { prog.h = MB.wait(card, { text: message, delay: HINT_MS, slowMs: SLOW_MS, slowText: SLOW_TEXT, onShown: () => n.classList.add('is-shown') }); return; }
+    if (MB) { prog.h = MB.wait(card, { text: message, delay: HINT_MS, slowMs: o.slowMs > 0 ? o.slowMs : SLOW_MS, slowText: SLOW_TEXT, style: o.style, onShown: () => n.classList.add('is-shown') }); return; }
     prog.plain = el('span', 'progress-text', message); card.replaceChildren(spinner(), prog.plain); n.classList.add('is-shown', 'is-plain'); // 部品が無いとき（前と同じ形）
     prog.slow = window.setTimeout(() => { if (prog.plain) prog.plain.textContent = SLOW_TEXT; }, SLOW_MS);
   }
@@ -84,7 +87,7 @@
     const n = $('#progress'), card = $('#progress-card');
     clearProgressCard(); n.hidden = false; n.classList.remove('is-plain'); n.classList.add('is-shown', 'is-error');
     const run = (fn) => () => { hideProgress(); if (fn) fn(); };
-    if (MB) MB.error(card, { title: o.title, text: o.text, retryLabel: 'もう一度', onRetry: run(o.retry), closeLabel: o.closeLabel || '閉じる', onClose: run(o.close), size: 's64' });
+    if (MB) MB.error(card, { title: o.title, text: o.text, retryLabel: 'もう一度', onRetry: run(o.retry), closeLabel: o.closeLabel || '閉じる', onClose: run(o.close), size: 's64', style: o.style });
     else { // 部品が無いとき（字と釦だけ）
       const box = el('div', 'progress-plain-err'); box.setAttribute('role', 'alert'); box.append(el('strong', '', o.title), el('p', '', o.text));
       const a = el('button', 'btn btn-primary', 'もう一度'); a.type = 'button'; a.addEventListener('click', run(o.retry));
@@ -99,12 +102,16 @@
     hideProgress();
     ['list', 'sheet', 'log', 'settings'].forEach((v) => { $('#view-' + v).hidden = true; });
     $('#login-panel').hidden = true; $('#month-nav').hidden = true; $('#view-tabs').hidden = true; $('#tb-right').hidden = true; $('#month-panel').hidden = true; $('#seed-panel').hidden = true; showNotice('');
-    const p = $('#empty-panel'); p.replaceChildren(); p.hidden = false;
-    const go = () => { p.hidden = true; retry(); };
-    if (MB) MB.empty(p, { title: 'まだ見られる月がありません', text: message, actionLabel: 'もう一度ひらく', onAction: go, size: 's48' });
-    else { const b = el('button', 'btn btn-primary', 'もう一度ひらく'); b.type = 'button'; b.addEventListener('click', go); p.append(el('h1', '', 'まだ見られる月がありません'), el('p', '', message), b); }
+    const p = $('#empty-panel'); p.hidden = false;
+    fillEmpty(p, message, () => { p.hidden = true; retry(); }, () => { clearSession(); p.hidden = true; showLogin(''); });
+  }
+  /** 空のカードの中身（本物の空と、ハチの見本で同じ物を使う）。style は見本だけ（この1枚の絵の案） */
+  function fillEmpty(p, message, onRetry, onOther, style) {
+    p.replaceChildren();
+    if (MB) MB.empty(p, { title: 'まだ見られる月がありません', text: message, actionLabel: 'もう一度ひらく', onAction: onRetry, size: 's48', style });
+    else { const b = el('button', 'btn btn-primary', 'もう一度ひらく'); b.type = 'button'; b.addEventListener('click', onRetry); p.append(el('h1', '', 'まだ見られる月がありません'), el('p', '', message), b); }
     const other = el('button', 'btn empty-other', 'ほかのアカウントでログインする'); other.type = 'button';
-    other.addEventListener('click', () => { clearSession(); p.hidden = true; showLogin(''); });
+    other.addEventListener('click', onOther);
     p.append(other);
   }
   function toast(message, error, action) {
@@ -128,7 +135,7 @@
     let gaveUp = false;
     const timer = controller ? window.setTimeout(() => { gaveUp = true; controller.abort(); }, GIVEUP_MS) : 0;
     const t0 = performance.now();
-    const noReply = () => appError(gaveUp ? '30 秒たっても返事がありません。通信を確かめて、もう一度お試しください（入れた物は消えません）。' : '通信できませんでした。通信を確かめて、もう一度お試しください（入れた物は消えません）。', 'NETWORK');
+    const noReply = () => appError(gaveUp ? NET_MSG.timeout : NET_MSG.offline, 'NETWORK');
     let response;
     try { response = await fetch(GAS_URL, { method: 'POST', mode: 'cors', redirect: 'follow', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: controller?.signal }); }
     catch { if (timer) window.clearTimeout(timer); perfNote('api:' + action, t0, 'error'); throw noReply(); }
@@ -861,7 +868,7 @@
     }
   }
 
-  window.SouzaiApp = { ensureWords, notePlace, placeNow, state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress, showRetry, RETRYABLE };
+  window.SouzaiApp = { ensureWords, notePlace, placeNow, state, views, FORM_CLASS, paintRunsInto, cancelProduct, $, el, esc, C, S, SN, api, rid, toast, spinner, busyButton, change, refresh, recompute, flush, serial, doMove, undoLast, undo, redo, remember, snapLayout, diffLayout, paintUndo, afterFormChange, showCosts, hideCosts, setView, monthText, perfNote, perfLog, kindOfSection, headPidOfRow, IS_DEV, showLogin, loadMonth, hasUnsaved, showProgress, hideProgress, showRetry, RETRYABLE, fillEmpty, MB, NET_MSG };
   // 部品が全部読み込まれてから始める（defer の順に読まれ、DOMContentLoaded は全部のあと）
   window.addEventListener('DOMContentLoaded', () => { start().catch(() => {}); });
 })();
