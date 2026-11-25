@@ -1,5 +1,5 @@
-/* >>> mitsubachi 0.3.0・正の印 b31d102d0f49・mitsubachi.css の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
-/* ミツバチの共通部品の見た目 0.3.0（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.css）。写しは make_copies.py が作る・手で直さない。
+/* >>> mitsubachi 0.3.1・正の印 90ba258c78c4・mitsubachi.css の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
+/* ミツバチの共通部品の見た目 0.3.1（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・0.3.1＝8 の字で奥へ行って手前へ戻る・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.css）。写しは make_copies.py が作る・手で直さない。
    色は画面（ホスト）の言葉を借りる: --mb-surface・--mb-ink・--mb-muted・--mb-line・--mb-btn-bg・--mb-btn-ink・--mb-btn-edge。無ければ下の既定（はちみつの黄）。
    蜂の絵の色（はちみつの黄・こげ茶の線）は全システムで同じ。字体は画面の物（外から読む字体は使わない）。 */
 .mb-wait, .mb-err, .mb-empty, .mb-done, .mb-pick {
@@ -23,10 +23,19 @@
 .mb-f { position: absolute; inset: 0; will-change: opacity; }
 .mb-f1 { opacity: 0; }
 .mb-shadow { position: absolute; left: 16px; bottom: 2px; width: 32px; height: 7px; border-radius: 50%; background: rgba(60, 40, 10, .14); will-change: transform; }
-/* 8 の字に飛ぶ（0.3.0）: 飛ぶ所は横 136px・縦 86px。ハチ（48px）は真ん中から左右 40px・上下 14px の 8 の字を回る（動きは mitsubachi.js の transform だけ） */
-.mb-loop { width: 136px; height: 86px; }
-.mb-loop .mb-fly { left: 44px; top: 15px; width: 48px; height: 48px; }
-.mb-loop .mb-shadow { left: 52px; bottom: 3px; width: 32px; height: 6px; }
+/* 8 の字に飛ぶ（0.3.0）: 飛ぶ所は横 136px・縦 90px。ハチ（48px）は真ん中から左右 40px・上下 14px の 8 の字を回る（動きは mitsubachi.js の transform と opacity だけ）
+   0.3.1: 奥へ行って手前へ戻る（大きさ 0.70〜1.15 倍・奥は少し淡く）。影は地面の上で、手前は大きく濃く下へ・奥は小さく淡く上へ（濃さは opacity で 0.45〜1） */
+.mb-loop { width: 136px; height: 90px; }
+.mb-loop .mb-fly { left: 44px; top: 17px; width: 48px; height: 48px; will-change: transform, opacity; }
+.mb-loop .mb-shadow { left: 52px; bottom: 5px; width: 32px; height: 6px; background: rgba(60, 40, 10, .2); will-change: transform, opacity; }
+/* 飛ぶ絵の版（0.3.1）: 窓（80px・はみ出しを切る）から1枚だけ見せる。版は 3 行（横向き・斜め後ろ・斜め前）× 2 列（羽の角度）。
+   行は mitsubachi.js が版を縦に・羽ばたきは横にずらす（transform だけ）。1枚は 48px で、80px の升の真ん中（羽や触角のはみ出しが隣の升に入らない） */
+.mb-loop .mb-win { position: absolute; left: -16px; top: -16px; width: 80px; height: 80px; overflow: hidden; }
+.mb-loop .mb-rows, .mb-loop .mb-cols { position: absolute; left: 0; top: 0; width: 160px; height: 240px; will-change: transform; }
+.mb-loop .mb-cell { position: absolute; width: 48px; height: 48px; }
+.mb-loop .mb-cell svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.mb-loop .mb-r0 { top: 16px; } .mb-loop .mb-r1 { top: 96px; } .mb-loop .mb-r2 { top: 176px; }
+.mb-loop .mb-k0 { left: 16px; } .mb-loop .mb-k1 { left: 96px; }
 .mb-rest { display: none; position: absolute; left: 4px; top: 6px; width: 56px; height: 56px; }
 .mb-rest svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .mb-wtxt { display: grid; gap: 2px; min-width: 12em; max-width: 30em; }

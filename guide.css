@@ -10,6 +10,9 @@
 /* 待ち・つながらないとき（ハチの部品）: 本文の場所の真ん中にカード（0.2.8: 前は本文の頭の左上に出ていた。置き方は styles.css の .wait-place＝ハチの見本と同じ） */
 /* 待つ間のハチの絵の節: 選ぶ所（もふ／むぎわら） */
 .gbee { margin: 4px 0 12px; --mb-ink: var(--ink); --mb-line: var(--line2); }
+.gbee + .gflow { margin-top: 18px; } /* 0.2.9: ハチの見本の開き方と進め方の流れ */
+/* 0.2.9: いちばん最後のクレジット（社内の生成AI利用ガイドライン 6.(4) の明示・小さく1行・右寄せ） */
+.guide-credit { margin: 28px 0 0; font-size: 12px; color: var(--ink2); text-align: right; }
 .guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1640px; margin: 0 auto; padding: 14px 16px 60px; } /* 0.2.8: 1440→1640（1920 の幅で右の空きを 1 割までに。文の段落は下の .gnotes で 1 行 60 字ほどに止め、図と写真が幅を使う） */
 .guide-toc { position: sticky; top: 8px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
 .guide-toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 4px solid transparent; }
@@ -17,6 +20,7 @@
 .guide-toc a.is-current { background: var(--brand-soft); border-left-color: var(--brand); font-weight: 700; }
 .guide-section { scroll-margin-top: 10px; border-top: 1px solid var(--line); padding: 16px 0 20px; content-visibility: auto; contain-intrinsic-size: auto 640px; } /* 画面の外の節は描かない（開く速さ）。印刷では全部描く */
 .guide-section:first-of-type { border-top: 0; }
+.guide-section.is-first { content-visibility: visible; contain-intrinsic-size: none; } /* 0.2.9: 最初の画面の2節は、すぐ描く（切り替えた直後に仮の 640px で図が下へずれない） */
 .guide-section h2 { font-size: 19px; margin: 0 0 10px; }
 .guide-section.is-landing { animation: guide-flash 1s ease-out; }
 @keyframes guide-flash { from { background: #fff7c2; } to { background: transparent; } }

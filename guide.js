@@ -201,22 +201,27 @@
     'ハチは 0.3 秒より長い待ちで 8 の字に飛び、つながらないときは困り顔で出ます。',
     '絵は もふ／むぎわら から選べます（右上のメニュー ▾ でも）。',
     '選んだ絵はこの PC に覚えます（店の PC はみんなで使うので、全員に効きます）。',
-    '出方は、右上のメニュー ▾ の「ハチの見本を見る」で見られます。',
+    '見本は 1 場面ずつ止まり、「次へ ▶」（キーの →）や左の一覧で進めます。',
     '止まって見えるのは、Windows の「アニメーション効果」がオフの PC です。'
   ] };
+  // 0.2.9: ハチの見本の開き方と進め方（図が先・文は短く）
+  const BEE_FLOW = { kind: 'flow', ui: [['quiet', 'アカウント ▾'], ['btn', 'ハチの見本を見る'], ['btn', '◀ 前へ ｜ 次へ ▶'], ['quiet', '← 元の画面へ戻る']] };
+  const BEE_STEPS = [{ h: '右上の ▾', t: 'メニューを開く' }, { h: '「ハチの見本を見る」', t: '1 / 12 の場面が出て止まる' }, { h: '「次へ ▶」で1場面ずつ', t: 'キーの → ←・左の一覧からも' }, { h: '「← 元の画面へ戻る」', t: 'Esc でも・元の画面のまま' }];
   function beeFig() { const box = el('div', 'gbee'); MB.picker(box, { label: '待つ間のハチの絵を選ぶ' }); return box; }
+  const CREDIT = '生成物の作成にAIを利用しています。'; // 社内の生成AI利用ガイドライン 6.(4) の明示。ガイドのいちばん最後に小さく1行（字と置き場はハブ 50_operations\rule_genai_label_on_outputs.md・PO 2026-11-25）
   function render(g) {
     document.title = String(g.title || document.title);
     const sections = Array.isArray(g.sections) ? g.sections.slice() : [];
     if (IS_DEV) sections.unshift({ id: 'proto', title: 'この試作について', items: ['この試作は手元だけで動いていて、本物のシートには書きません。', '右上のメニューの「見本をはじめの形に戻す」で、はじめの形に戻ります。'] });
     if (MB) sections.push(BEE_SECTION);
     const box = document.getElementById('guide-content');
-    sections.forEach((s) => {
+    sections.forEach((s, si) => {
       const id = String(s.id || '').replace(/[^a-z0-9-]/gi, ''); if (!id) return;
       const a = el('a', '', s.title); a.href = '#g-' + id; a.dataset.id = id; a.addEventListener('click', (e) => { e.preventDefault(); jump(id); }); toc.append(a);
-      const sec = el('section', 'guide-section'); sec.id = 'g-' + id; sec.append(el('h2', '', s.title));
+      // 0.2.9: 最初の画面の2節は、すぐ描く（content-visibility の仮の高さのまま測られて、1枚目の図が下へずれて見えることがあった＝ガイドを切り替えた直後）
+      const sec = el('section', 'guide-section' + (si < 2 ? ' is-first' : '')); sec.id = 'g-' + id; sec.append(el('h2', '', s.title));
       const steps = stepsOf(s.steps), fig = figOf(s.fig);
-      if (s === BEE_SECTION) sec.append(beeFig());
+      if (s === BEE_SECTION) sec.append(beeFig(), flowFig(BEE_FLOW, BEE_STEPS));
       else if (fig && (fig.kind === 'flow' || fig.kind === 'cards')) sec.append(flowFig(fig, steps));
       else if (fig && fig.kind === 'forms') { sec.append(formsFig(fig)); if (steps.length) sec.append(stepList(steps)); }
       else if (fig && fig.kind === 'shot') { const pair = el('div', 'gpair' + (fig.w <= 640 || (fig.w <= 1000 && fig.w / fig.h < 1.6) ? ' is-side' : '')); pair.append(shotFig(fig)); if (steps.length) pair.append(stepList(steps)); sec.append(pair); linkHot(sec); }
@@ -225,6 +230,7 @@
       if (items.length) { const ul = el('ul', 'gnotes'); items.forEach((t) => ul.append(el('li', '', t))); sec.append(ul); }
       box.append(sec);
     });
+    box.append(el('p', 'guide-credit', CREDIT)); // 0.2.9: いちばん最後にクレジットとして小さく（どちら向けのガイドにも）
     status.hidden = true; document.getElementById('guide-root').hidden = false; spy(); setTocGap();
   }
   // 表の見出しを、上に残る目次の帯（狭い幅）の下に残す（帯の高さは決め打ちせず測る）

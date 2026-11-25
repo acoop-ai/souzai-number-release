@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.8・窓口は 0.2.6 のまま）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
+  // 商品呼出番号表の画面の土台（版 souzai-number-api-0.2.9・窓口は 0.2.6 のまま）。通信・ログイン・保存の列・待ちの印・上の帯・Excel。一覧は view-list.js・見本は view-sheet.js・記録と設定は view-more.js。
   // 業務データ・アカウント表・鍵は置かない。だれか・何ができるかは、毎回 窓口が決める。原価は本部の人が開くとき（たたんでいなければ）・「原価を表示」・Excel のときだけ受け取り、端末に残さない。見るだけの人には窓口が返さない。
   // 信頼境界: 窓口から届く文字（商品名など）は、人が打った文字。画面に出すときは textContent か esc() を通す。
-  const APP_VERSION = 'souzai-number-api-0.2.8';
+  const APP_VERSION = 'souzai-number-api-0.2.9';
   const CONFIG = window.APP_CONFIG || {};
   const IS_DEV = CONFIG.dev === true && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   const GAS_URL = String(CONFIG.gasUrl || '');
@@ -66,6 +66,7 @@
   //   → やり直せば直るエラー（通信・混雑・30 秒）だけ、同じ幕の中にハチの困り顔・理由・「もう一度」（showRetry）。人が直すエラーは、いままでどおりお知らせ（toast）。
   //   部品が読めない端末でも、前と同じ回る印と字で動く。
   //   0.2.8: ハチは 8 の字に飛ぶ（部品 0.3.0）。opt（showProgress）・o.style（showRetry）・style（fillEmpty）は、ハチの見本（bee-demo.js）だけが使う＝絵の案をこの1枚だけ決める・8 秒を縮める。
+  //   0.2.9: 8 の字で奥へ行って手前へ戻る（部品 0.3.1）。見本は自分のペースで進める形（8 秒は本物のまま・見本の間だけ #progress の上と左を見本が決める）。
   const MB = window.Mitsubachi || null;
   const prog = { h: null, plain: null, slow: 0 };
   const RETRYABLE = (e) => Boolean(e) && (e.code === 'NETWORK' || e.code === 'BUSY'); // 通信の失敗・30 秒・混雑（窓口の BUSY）

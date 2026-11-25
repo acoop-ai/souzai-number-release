@@ -70,6 +70,8 @@ tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
 
 /* 本体 */
 .main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+/* 0.2.9: 画面のいちばん下のクレジット（社内の生成AI利用ガイドライン 6.(4) の明示・小さく1行・右寄せ。字と置き場はハブ 50_operations\rule_genai_label_on_outputs.md） */
+.app-credit { flex: none; margin: 0; padding: 1px 12px 2px; font-size: 11.5px; line-height: 1.4; color: var(--ink2); text-align: right; background: var(--bg); border-top: 1px solid var(--line); }
 .view { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--panel); }
 .view.is-off { content-visibility: hidden; visibility: hidden; pointer-events: none; }
 .view-scroll { overflow: auto; padding: 14px 16px; }
@@ -108,16 +110,36 @@ tr.lr.is-undone > td { animation: undo-flash 1.4s ease-out; }
 .wait-place { flex: 1; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center;
   --mb-surface: #fff; --mb-ink: var(--ink); --mb-muted: var(--ink2); --mb-line: var(--line2); --mb-btn-bg: var(--brand); --mb-btn-ink: #fff; --mb-btn-edge: var(--brand); }
 .wait-place .mb-wait, .wait-place .mb-err { text-align: left; background: #fff; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, .08); max-width: min(560px, 100%); }
-/* ハチの見本（0.2.8）: 上の帯と同じ所に見本の帯（← 元の画面へ戻る・いまの場面・前／止める／次）。すぐ下に場面の説明を小さく。本物の幕・カードはそのまま使う */
+/* ハチの見本（0.2.8・0.2.9 で自分のペースで見る形に）: 上の帯と同じ所に見本の帯（← 元の画面へ戻る）・左に場面の一覧（12）・場面の上に進める釦と説明（大きめ）。
+   本物の幕（#progress）は、見本の間だけ場面の置き場（一覧の右・説明の下）に収める（bee-demo.js が上と左を決める）。本物のカードはそのまま使う */
 .bee-demo-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 97; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; min-height: 44px; background: #2b2418; color: #fff; } /* 左右の余白と高さは上の帯と同じ（← 元の画面へ戻る が ← 戻る と同じ所に来る。高さは bee-demo.js が上の帯に合わせる） */
 .bee-demo-bar .bd-badge { background: #f0b531; color: #3b2a1a; border-radius: 6px; padding: 1px 8px; font-weight: 800; font-size: 13.5px; white-space: nowrap; }
-.bee-demo-bar .bd-count { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
-.bee-demo-bar .bd-style { border: 1px solid rgba(255, 255, 255, .55); border-radius: 999px; padding: 0 10px; font-size: 13.5px; white-space: nowrap; }
-.bee-demo-bar .bd-name { font-size: 15px; min-width: 0; }
-.bee-demo-bar .bd-ctl { display: inline-flex; gap: 4px; margin-left: auto; }
-.bee-demo-bar .bd-pause[aria-pressed="true"] { background: #f0b531; color: #3b2a1a; border-color: #f0b531; }
-.bee-demo-cap { position: fixed; left: 0; right: 0; z-index: 97; display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 5px 14px; background: #fff8e1; color: #3b2a1a; border-bottom: 1px solid #e8d49a; font-size: 14px; }
-.bee-demo-cap .bd-still { font-weight: 700; }
+.bee-demo-bar .bd-lead { font-size: 14px; min-width: 0; }
+.bee-demo-bar .bd-keys { margin-left: auto; font-size: 13px; opacity: .9; white-space: nowrap; }
+/* 左の場面の一覧（目次と同じ形・いまの場面は色の面と左の線） */
+.bee-demo-list { position: fixed; left: 0; bottom: 0; width: 250px; z-index: 97; overflow: auto; overscroll-behavior: contain; padding: 8px 8px 16px; background: #fffdf5; border-right: 1px solid #e8d49a; }
+.bee-demo-list .bdl-title { margin: 2px 6px 4px; font-weight: 800; font-size: 15px; color: #3b2a1a; }
+.bee-demo-list .bdl-head { margin: 8px 6px 2px; font-size: 13px; font-weight: 700; color: #6b4e16; }
+.bee-demo-list .bdl-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; margin-bottom: 2px; padding: 4px 8px; text-align: left; background: none; border: 0; border-left: 4px solid transparent; border-radius: 6px; color: var(--ink); font-size: 14.5px; }
+.bee-demo-list .bdl-item:hover { background: #fff1c9; }
+.bee-demo-list .bdl-item[aria-current="step"] { background: #ffe8a3; border-left-color: #c98a06; font-weight: 700; }
+.bee-demo-list .bdl-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid #c98a06; color: #6b4e16; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bee-demo-list .bdl-item[aria-current="step"] .bdl-n { background: #c98a06; color: #fff; }
+.bee-demo-list.is-drop { width: auto; right: 0; bottom: auto; max-height: 60vh; border-right: 0; border-bottom: 1px solid #e8d49a; box-shadow: 0 8px 18px rgba(0, 0, 0, .18); }
+/* 場面の上: 進める釦（前へ・何番目・次へ・もう一度・自動で流す）・絵・場面の名前（大きめ）・どんな時に出るか（大きめの1行）・見本での注 */
+.bee-demo-cap { position: fixed; left: 0; right: 0; z-index: 97; display: grid; gap: 4px; padding: 10px 18px 10px; background: #fff8e1; color: #3b2a1a; border-bottom: 1px solid #e8d49a; }
+.bee-demo-cap .bd-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.bee-demo-cap .btn { min-height: 38px; font-weight: 700; }
+.bee-demo-cap .bd-count { min-width: 4.2em; text-align: center; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bee-demo-cap .bd-autobox { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.bee-demo-cap .bd-auto[aria-pressed="true"], .bee-demo-cap .bd-pause[aria-pressed="true"] { background: #f0b531; color: #3b2a1a; border-color: #c98a06; }
+.bee-demo-cap .bd-left { font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 0; }
+.bee-demo-cap .bd-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
+.bee-demo-cap .bd-style { border: 1px solid #c98a06; border-radius: 999px; padding: 0 10px; font-size: 14px; white-space: nowrap; background: #fff; }
+.bee-demo-cap .bd-name { font-size: 21px; }
+.bee-demo-cap .bd-when { margin: 0; font-size: 17px; line-height: 1.5; max-width: 60em; }
+.bee-demo-cap .bd-note { margin: 0; font-size: 14px; color: #5d4a1f; max-width: 70em; }
+.bee-demo-cap .bd-still { margin: 0; font-size: 14px; font-weight: 700; }
 .bee-demo-shield { position: fixed; inset: 0; z-index: 89; background: transparent; }
 .bee-demo-stage { position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; background: var(--bg); overflow: auto; }
 .bee-demo-stage.is-guide { background: #fff; display: flex; flex-direction: column; }
@@ -422,6 +444,13 @@ details.perf { margin-top: 16px; font-size: 13.5px; }
   body { font-size: 14.5px; }
   .topbar { padding: 5px 8px; gap: 4px 8px; }
   .bee-demo-bar { padding: 5px 8px; gap: 4px 8px; }
+  .bee-demo-bar .bd-lead, .bee-demo-bar .bd-keys { display: none; } /* スマホの幅: 帯は ← 元の画面へ戻る と名前だけ（キーは無い） */
+  .bee-demo-cap { padding: 8px 10px; }
+  .bee-demo-cap .bd-count { font-size: 19px; min-width: 3.6em; }
+  .bee-demo-cap .bd-autobox { margin-left: 0; }
+  .bee-demo-cap .bd-long { display: none; }
+  .bee-demo-cap .bd-name { font-size: 18px; }
+  .bee-demo-cap .bd-when { font-size: 15.5px; }
   .tb-left { flex-wrap: wrap; gap: 4px 8px; width: 100%; }
   .tb-right { flex-wrap: wrap; gap: 4px 6px; width: 100%; }
   .brand { font-size: 15px; }

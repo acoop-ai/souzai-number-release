@@ -1,16 +1,17 @@
-/* >>> mitsubachi 0.3.0・正の印 b31d102d0f49・mitsubachi.js の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
-/* ミツバチの共通部品 0.3.0（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.js）
+/* >>> mitsubachi 0.3.1・正の印 90ba258c78c4・mitsubachi.js の写し（_共通\ミツバチ から make_copies.py が書く・手で直さない） <<< */
+/* ミツバチの共通部品 0.3.1（段0・2026-11-24／0.3.0＝待ちのハチが 8 の字に飛ぶ・0.3.1＝8 の字で奥へ行って手前へ戻る・2026-11-25）— 正はこのファイル（Desktop\ClaudeCode\_共通\ミツバチ\mitsubachi.js）
    - 各システムは版を作るときに make_copies.py で写す（手で直さない・動いている最中に読みに行かない）。写しが正と同じかは check_copies.py で数える。
    - 絵は2案だけ: B もふはち（既定）・C むぎわらはち。使う人が選ぶ（setStyle・ブラウザに覚える。覚えられない端末でも B で動く）。
    - 画像ファイル・外の読み込みなし（通信が切れても絵は崩れない）。絵は部品の中で SVG の字を組む。外から来た値は絵に入れない（案・角度・大きさは決まった物だけ受ける）。
    - 字（案内の文）は textContent で入れる（HTML として働かない）。見た目は mitsubachi.css。style の属性を書かない（CSP の style-src 'self' の画面でも動く）。
    - 動きは Web Animations（transform と opacity だけ）。端末の「動きを減らす」・setMotion(false) のときは止めた絵（動きを作らない）。
    - 待ちのハチは、横長の 8 の字（ミツバチの 8 の字ダンスの形）を 1 周 3.6 秒で飛ぶ。進む方へ向き（左へ進むときは左右を返す）、羽ばたきは2枚の絵の切り替え（0.3.0）。
+     0.3.1: モックと同じく、右の輪で奥へ行き（小さく・少し淡く・影は小さく奥へ）、左の輪で手前へ戻る（大きく・はっきり・影は大きく手前へ）。大きさ 0.70〜1.15 倍。
    - 待ちは delay（既定 0.3 秒）までに終われば何も作らない＝速い操作には一切の重さが乗らない。
    - 質感のフィルタ・鉛筆の線は既定で外す（重さを測って決めた: 提案書 V1「6 速さと守り」）。 */
 (function (G) {
   'use strict';
-  var VERSION = '0.3.0';
+  var VERSION = '0.3.1';
   var CHEEK = '#F08A78', DARK = '#2A170A';
   var own = function (o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); };
   var STYLES = {
@@ -337,31 +338,64 @@
   }
   /* 8 の字に飛ぶ1匹（0.3.0・2026-11-25 PO「ハチが 8 の字に飛んで回る」）。横長の 8 の字（∞・真ん中で交わる）を 1 周 3.6 秒で回る。
      横向きの絵（羽の角度ちがいの2枚を重ね、外側の箱の opacity で羽ばたく）を、進む方へ向け（左へ進むときは左右を返す＝端で向きを変える）、
-     上り下りに合わせて少し傾ける。動かすのは外側の箱の transform だけ（絵の描き直しが起きない）。道筋の点は1回だけ作って使い回す。
+     上り下りに合わせて少し傾ける。道筋の点は1回だけ作って使い回す。
+     0.3.1（2026-11-25 PO「モックのように奥にも移動する立体感がない」）: 提案書のモック（回って飛ぶ）と同じ奥行き＝横 sin u・縦 sin 2u・奥行き cos u。
+       真ん中を手前で1回・奥で1回通り、右の輪で奥へ行って、左の輪で手前へ戻る。奥ほど小さく（0.70 倍）・少し淡く（奥の半分だけ・いちばん奥で 0.72）、
+       手前ほど大きく（1.15 倍）・はっきり。影は地面の上: 手前では大きく濃く下へ、奥では小さく淡く上へ（遠くの地面は上に見える）。ハチが高い所では影を少し小さく。
+       輪の端（右＝奥へ向かう・左＝手前へ向かう）では、横向きの絵を細くして返す代わりに、斜め後ろ（3B）・斜め前（3F）の絵に替えて向きを返す（モックと同じ・横向きの絵は細くならない）。
+       動かすのは transform と opacity だけ（絵は描き直さない・羽ばたきは前のまま）。字とは重ならない置き場なので、重なりの順は切り替えない（字を隠さない）。
+       重くしない作り: 絵は「3 つの角度（行）× 羽の角度 2 つ（列）」を1枚の版に並べ、窓（はみ出しを切る箱）から1枚だけ見せる。羽ばたき＝版を横へ・角度を替える＝版を縦へずらす
+       （どちらも transform の1つの動き）。動きは 飛ぶ箱・影・角度・羽ばたき の 4 つ＝0.3.0 と同じ数（1枚ずつ opacity で切り替えると、絵の数だけ動きが増え、画面の仕事が増えた＝実測）。
      端末の「動きを減らす」なら、飛ぶ絵は隠して正面の止まった絵（0.2.0 と同じ大きさ・置き場） */
-  var LOOP = { ms: 3600, n: 36, ax: 40, ay: 14, frames: null };
+  var LOOP = { ms: 3600, n: 48, ax: 40, ay: 14, near: 1.15, far: .70, fade: .72, gz: 6, turn: .65, cell: 80, frames: null };
+  var TURN_VIEWS = ['S', '3B', '3F'];                                           // 版の行: 横向き・輪の右の端（奥へ向かう＝斜め後ろ）・輪の左の端（手前へ向かう＝斜め前）
   function loopFrames() {
     if (LOOP.frames) return LOOP.frames;
-    var fly = [], shadow = [];
-    for (var i = 0; i <= LOOP.n; i++) {
-      var t = (i + .5) / LOOP.n * 2 * Math.PI;                                // 半コマずらす（輪の端で向きを返す瞬間に、点を置かない＝幅 0 の絵を止めて見せない）
-      var x = LOOP.ax * Math.cos(t), y = LOOP.ay * Math.sin(2 * t);          // 横長の 8 の字（右の輪は時計回り・左の輪は反時計回り）
-      var dx = -LOOP.ax * Math.sin(t), dy = 2 * LOOP.ay * Math.cos(2 * t);  // 進む向き
-      var face = clamp(dx / (LOOP.ax * .3), -1, 1);                         // 右へ進むとき 1・左へ −1（輪の端で、すばやく向きを変える）
-      var tilt = face * clamp(Math.atan2(dy, Math.abs(dx) + 1e-6) * 180 / Math.PI, -24, 24); // 下りは頭を下げ、上りは上げる
-      fly.push({ transform: 'translate(' + f(x) + 'px,' + f(y) + 'px) rotate(' + f(tilt) + 'deg) scaleX(' + f(face) + ')' });
-      shadow.push({ transform: 'translateX(' + f(x) + 'px) scale(' + f(.78 + .22 * (y + LOOP.ay) / (2 * LOOP.ay)) + ')' });
+    var mid = (LOOP.near + LOOP.far) / 2, amp = (LOOP.near - LOOP.far) / 2, P2 = 2 * Math.PI, d = LOOP.turn, C = LOOP.cell;
+    var R1 = Math.PI / 2, R2 = 3 * Math.PI / 2;                                // 輪の端（ここで左右を返す）
+    var off = function (u) { return +(u / P2).toFixed(5); }, S = 'steps(1,end)', EPS = .0002; // 左右を返すのは 0.7 ミリ秒の間（同じ時刻の点を2つ置かない）
+    function at(u, face) {
+      var x = LOOP.ax * Math.sin(u), y = LOOP.ay * Math.sin(2 * u), z = Math.cos(u); // 横長の 8 の字（真ん中で交わる）・奥行き（1＝いちばん手前・−1＝いちばん奥）
+      var dx = LOOP.ax * Math.cos(u), dy = 2 * LOOP.ay * Math.cos(2 * u);       // 画面の上で進む向き
+      var w = clamp(Math.abs(dx) / (LOOP.ax * .5), .45, 1);                    // 輪の端では傾きを弱める
+      var tilt = face * w * clamp(Math.atan2(dy, Math.abs(dx) + 1e-6) * 180 / Math.PI, -24, 24); // 下りは頭を下げ、上りは上げる
+      var sc = mid + amp * z;                                                  // 奥 0.70 倍 〜 手前 1.15 倍（なめらかに）
+      var op = z < 0 ? 1 + (LOOP.fade - 1) * -z : 1;                           // 奥の半分だけ少し淡く（いちばん奥で 0.72）
+      var low = (y + LOOP.ay) / (2 * LOOP.ay);                                 // 0＝高い所 〜 1＝低い所（高いほど影は小さい）
+      return {
+        fly: { offset: off(u), transform: 'translate(' + f(x) + 'px,' + f(y) + 'px) rotate(' + f(tilt) + 'deg) scale(' + f(face * sc) + ',' + f(sc) + ')', opacity: f(op) },
+        shadow: { offset: off(u), transform: 'translate(' + f(x) + 'px,' + f(LOOP.gz * z) + 'px) scale(' + f(sc * (.8 + .2 * low)) + ')', opacity: f(.45 + .55 * (z + 1) / 2) }
+      };
     }
-    LOOP.frames = { fly: fly, shadow: shadow };
+    // 道筋の点: 1 周を n 等分＋輪の端に2つ（返す前と、0.7 ミリ秒あと＝一瞬で左右を返す。斜めの絵を見せている間なので、横向きの絵は細くならない）
+    var fly = [], shadow = [], flips = [[R1, 1, -1], [R2, -1, 1]];
+    for (var i = 0; i <= LOOP.n; i++) {
+      var u = i / LOOP.n * P2, same = false;
+      while (flips.length && flips[0][0] <= u + 1e-9) {
+        var fl = flips.shift(), a = at(fl[0], fl[1]).fly, b = at(fl[0], fl[2]).fly; b.offset = +(a.offset + EPS).toFixed(5);
+        fly.push(a, b); same = same || Math.abs(fl[0] - u) < 1e-9;
+      }
+      var p = at(u, u < R1 || u > R2 ? 1 : -1);                                // 右へ進むとき 1・左へ −1
+      if (!same) fly.push(p.fly);                                              // 輪の端と同じ点は上の2つで置いた
+      shadow.push(p.shadow);                                                   // 影は左右を返さない（等分の点だけ）
+    }
+    var row = function (k) { return 'translateY(' + (-k * C) + 'px)'; };       // 版の行（0＝横向き・1＝斜め後ろ・2＝斜め前）。替わるのは一瞬（steps）
+    var view = [{ offset: 0, transform: row(0), easing: S }, { offset: off(R1 - d), transform: row(1), easing: S }, { offset: off(R1 + d), transform: row(0), easing: S },
+      { offset: off(R2 - d), transform: row(2), easing: S }, { offset: off(R2 + d), transform: row(0), easing: S }, { offset: 1, transform: row(0) }];
+    var flap = [{ offset: 0, transform: 'translateX(0px)', easing: S }, { offset: .5, transform: 'translateX(' + (-C) + 'px)', easing: S }, { offset: 1, transform: 'translateX(' + (-C) + 'px)' }]; // 羽の角度 2 つを 0.08 秒ずつ
+    LOOP.frames = { fly: fly, shadow: shadow, view: view, flap: flap };
     return LOOP.frames;
   }
   function buildHover(box, h) {
     var st = box.appendChild(E('div', 'mb-stage mb-loop'));
     var sh = st.appendChild(E('span', 'mb-shadow'));
     var fly = st.appendChild(E('div', 'mb-fly'));
-    var l = fly.appendChild(E('span', 'mb-v'));
     var so = h.style || undefined;
-    l.innerHTML = '<span class="mb-f mb-f0">' + svg('S', { wing: 0, style: so }) + '</span><span class="mb-f mb-f1">' + svg('S', { wing: 1, style: so }) + '</span>';
+    // 窓（はみ出しを切る 80px の箱）＞ 行を替える版（縦にずらす）＞ 羽ばたきの版（横にずらす）＞ 6 枚の絵（3 つの角度 × 羽の角度 2 つ）
+    var win = fly.appendChild(E('span', 'mb-win')), rows = win.appendChild(E('span', 'mb-rows')), cols = rows.appendChild(E('span', 'mb-cols'));
+    TURN_VIEWS.forEach(function (v, k) {
+      [0, 1].forEach(function (w) { var c = cols.appendChild(E('span', 'mb-cell mb-r' + k + ' mb-k' + w)); c.innerHTML = svg(v, { wing: w, style: so }); });
+    });
     h.still = function () {
       if (st.querySelector('.mb-rest')) return;
       var r = st.appendChild(E('span', 'mb-rest'));
@@ -370,12 +404,7 @@
     if (typeof fly.animate !== 'function') { box.classList.add('mb-noanim'); h.still(); return; }
     h.start = function () {
       var fr = loopFrames(), loop = { duration: LOOP.ms, iterations: Infinity };
-      return [
-        fly.animate(fr.fly, loop),
-        sh.animate(fr.shadow, loop),
-        l.firstChild.animate([{ offset: 0, opacity: 1, easing: 'steps(1,end)' }, { offset: .5, opacity: 0, easing: 'steps(1,end)' }, { offset: 1, opacity: 0 }], { duration: 160, iterations: Infinity }),
-        l.lastChild.animate([{ offset: 0, opacity: 0, easing: 'steps(1,end)' }, { offset: .5, opacity: 1, easing: 'steps(1,end)' }, { offset: 1, opacity: 1 }], { duration: 160, iterations: Infinity })
-      ];
+      return [fly.animate(fr.fly, loop), sh.animate(fr.shadow, loop), rows.animate(fr.view, loop), cols.animate(fr.flap, { duration: 160, iterations: Infinity })];
     };
   }
   /* 本当の進み具合（何件のうち何件）が分かる長い待ちだけ。作り物の進み具合は出さない */
